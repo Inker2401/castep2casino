@@ -1,0 +1,4 @@
+src/*.o 
+src/*.mod 
+obj/*
+casino2castep.e

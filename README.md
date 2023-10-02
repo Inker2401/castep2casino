@@ -37,21 +37,41 @@ The program is capable of understanding CASTEP input files and parsing them.
 Therefore, the same input parameters you use for CASTEP should work here.
 
 The most basic usage is
-```castep2casino <casino_file> <castep_seedname>`
+```castep2casino <casino_file> [lat_geom_file]`
+```
+`casino_file` contains the CASINO density.
 
-`casino_file` contains the CASINO denisty while `castep_seedname` is the seedname of the CASTEP file, that is to say without the file extensions.
-At a bare minimum, you will require the cell file.
+If you do not specify the `lat_geom_file`, the program will look for it in the form of in the form of `seedname.latt_geom`.
+The `seedname` will be taken from the `casino_file`, i.e. if the CASINO file is named `QMC.txt`, the program will look for the file `QMC.latt`.
 
-In order to convert the G-vectors into multiples of the primitive, reciprocal lattice vectors, we must specify the primitive real lattice vectors.
-You can either:
-- specify them directly in the `lattice_cart` block
-- if you are constructing a supercell of the _primitive_ cell, you can use the `supercell_size` keyword in the cell file. For instance, for a 1 x 2 x 3 supercell,
-  `supercell_size 1 2 3`.
-  Comment this out using an exclamation mark `!`, if you are using the cell for a CASTEP run.
 
-The second thing you must specify is the required CASTEP grid size. When you execute the program, a prompt will come up requiring you to enter the required CASTEP grid size.
-You can either do this on a single line with spaces, e.g.
-`1 2 3` or enter the first number, then press `Enter`, the second number and so on.
+### User Options
+The `<lat_geom_file>` effectively contains the set of user-defined parameters which are:
+- `prim_latt_cart` block - primitive real lattice vectors.
+- `castep_grid` = the dimensions of the CASTEP grid.
+- `unit_bohr` - unit for real lattice vectors are Bohr. This is an **OPTIONAL** parameter, and otherwise angstroms are used as the input unit.
+- `output_file` - The file to use to write the CASTEP output. This is an **OPTIONAL** parameter.
+
+The primitive real lattice vectors are specified as follows:
+```
+%block prim_latt_cart
+a_x a_y a_z
+b_x b_y b_z
+c_x c_y c_z
+%endblock prim_latt_cart
+```
+
+The default input unit for the lattice vectors are ANGSTROMS.
+You may alternatively put the string `latt_bohr` anywhere in the cell file and then enter the lattice vectors in atomic units (Bohr).
+
+The second thing you must specify is the required CASTEP grid size. This is likewise done in the `lat_geom_file` through the parameter
+```
+castep_grid <nx> <ny> <nz>
+```
+For instance, if you needed a grid of size 10 x 20 x 30, you would enter `castep_grid 10 20 30`.
+
+For the output file, if `output_file` is not specified, the program will use the `lat_geom_file` seedname.
+For example, if you have a file named `QMC.dat` as the lattice geometry file, then the output file will be `QMC.den_fmt`.
 
 ## Licence
 Copyright (C) 2023 V Ravindran, S J Clark.
