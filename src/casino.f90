@@ -311,97 +311,99 @@ contains
     ! Clean up
     deallocate(den_grid)
 
+  contains
+
+    logical function casino_check_cmplx_conj(den_grid,nx,ny,nz)
+      !============================================================!
+      ! This function checks for complex conjugate symmetry of the !
+      ! the density. Since the real space density is a real        !
+      ! function, in reciprocal space, the Fourier components      !
+      ! satisfy                                                    !
+      !       rho_G = rho_-G^*                                     !
+      !------------------------------------------------------------!
+      ! Arguments                                                  !
+      ! den_grid(in) : The density on a grid with symmetric bounds !
+      ! nx,ny,nz(in) : upper bound of den_grid                     !
+      !------------------------------------------------------------!
+      ! Modules used                                               !
+      ! Constants,Basis                                            !
+      !------------------------------------------------------------!
+      ! Necessary Conditions                                       !
+      ! den_grid must have array bounds that are symmetric, i.e.   !
+      ! if there are a TOTAL of ngx points along x, the bounds for !
+      ! x must run from -x0 to x0 where x0=(ngx-1)/2               !
+      !============================================================!
+      use math, only : math_isclose
+
+      implicit none
+      complex(kind=dp),allocatable :: den_grid(:,:,:) ! density stored on grid with symmetric bounds
+      integer :: nx,ny,nz
+
+      integer :: ix,iy,iz
+
+      ! Assume true until told otherwise
+      casino_check_cmplx_conj=.true.
+
+      ! Loop over all grid points.
+      ! Since we are just checking the symmetry, we just need to loop over half of them
+      ! as they should be the same!
+      do ix=0,nx
+         do iy=0,ny
+            do iz=0,nz
+               if(.not. math_isclose(den_grid(ix,iy,iz),den_grid(-ix,-iy,-iz)) ) then
+                  casino_check_cmplx_conj=.false.
+                  return
+               end if
+            end do
+         end do
+      end do
+    end function casino_check_cmplx_conj
+
+    logical function casino_check_inver_sym(den_grid,nx,ny,nz)
+      !============================================================!
+      ! This function checks for inversion symmetry of the         !
+      ! the density where the Fourier components satisfy           !
+      !       rho_G = rho_G^*                                      !
+      ! i.e. the components are real.                              !
+      !------------------------------------------------------------!
+      ! Arguments                                                  !
+      ! den_grid(in) : The density on a grid with symmetric bounds !
+      ! nx,ny,nz(in) : upper bound of den_grid                     !
+      !------------------------------------------------------------!
+      ! Modules used                                               !
+      ! Constants,Basis                                            !
+      !------------------------------------------------------------!
+      ! Necessary Conditions                                       !
+      ! den_grid must have array bounds that are symmetric, i.e.   !
+      ! if there are a TOTAL of ngx points along x, the bounds for !
+      ! x must run from -x0 to x0 where x0=(ngx-1)/2               !
+      !============================================================!
+      use math, only : math_isclose
+      implicit none
+      complex(kind=dp),allocatable :: den_grid(:,:,:) ! density stored on grid with symmetric bounds
+      integer :: nx,ny,nz
+
+      integer :: ix,iy,iz
+
+      ! Assume true until told otherwise
+      casino_check_inver_sym=.true.
+
+      ! Loop over all grid points.
+      ! Since we are just checking the symmetry, we just need to loop over half of them
+      ! as they should be the same!
+      do ix=-nx,nx
+         do iy=-ny,ny
+            do iz=-nz,nz
+               if(.not. math_isclose(den_grid(ix,iy,iz),conjg(den_grid(ix,iy,iz))) ) then
+                  casino_check_inver_sym=.false.
+                  return
+               end if
+            end do
+         end do
+      end do
+    end function casino_check_inver_sym
+
   end subroutine casino_check_symmetry
-
-  logical function casino_check_cmplx_conj(den_grid,nx,ny,nz)
-    !============================================================!
-    ! This function checks for complex conjugate symmetry of the !
-    ! the density. Since the real space density is a real        !
-    ! function, in reciprocal space, the Fourier components      !
-    ! satisfy                                                    !
-    !       rho_G = rho_-G^*                                     !
-    !------------------------------------------------------------!
-    ! Arguments                                                  !
-    ! den_grid(in) : The density on a grid with symmetric bounds !
-    ! nx,ny,nz(in) : upper bound of den_grid                     !
-    !------------------------------------------------------------!
-    ! Modules used                                               !
-    ! Constants,Basis                                            !
-    !------------------------------------------------------------!
-    ! Necessary Conditions                                       !
-    ! den_grid must have array bounds that are symmetric, i.e.   !
-    ! if there are a TOTAL of ngx points along x, the bounds for !
-    ! x must run from -x0 to x0 where x0=(ngx-1)/2               !
-    !============================================================!
-    use math, only : math_isclose
-
-    implicit none
-    complex(kind=dp),allocatable :: den_grid(:,:,:) ! density stored on grid with symmetric bounds
-    integer :: nx,ny,nz
-
-    integer :: ix,iy,iz
-
-    ! Assume true until told otherwise
-    casino_check_cmplx_conj=.true.
-
-    ! Loop over all grid points.
-    ! Since we are just checking the symmetry, we just need to loop over half of them
-    ! as they should be the same!
-    do ix=0,nx
-       do iy=0,ny
-          do iz=0,nz
-             if(.not. math_isclose(den_grid(ix,iy,iz),den_grid(-ix,-iy,-iz)) ) then
-                casino_check_cmplx_conj=.false.
-                return
-             end if
-          end do
-       end do
-    end do
-  end function casino_check_cmplx_conj
-
-  logical function casino_check_inver_sym(den_grid,nx,ny,nz)
-    !============================================================!
-    ! This function checks for inversion symmetry of the         !
-    ! the density where the Fourier components satisfy           !
-    !       rho_G = rho_G^*                                      !
-    ! i.e. the components are real.                              !
-    !------------------------------------------------------------!
-    ! Arguments                                                  !
-    ! den_grid(in) : The density on a grid with symmetric bounds !
-    ! nx,ny,nz(in) : upper bound of den_grid                     !
-    !------------------------------------------------------------!
-    ! Modules used                                               !
-    ! Constants,Basis                                            !
-    !------------------------------------------------------------!
-    ! Necessary Conditions                                       !
-    ! den_grid must have array bounds that are symmetric, i.e.   !
-    ! if there are a TOTAL of ngx points along x, the bounds for !
-    ! x must run from -x0 to x0 where x0=(ngx-1)/2               !
-    !============================================================!
-    use math, only : math_isclose
-    implicit none
-    complex(kind=dp),allocatable :: den_grid(:,:,:) ! density stored on grid with symmetric bounds
-    integer :: nx,ny,nz
-
-    integer :: ix,iy,iz
-
-    ! Assume true until told otherwise
-    casino_check_inver_sym=.true.
-
-    ! Loop over all grid points.
-    ! Since we are just checking the symmetry, we just need to loop over half of them
-    ! as they should be the same!
-    do ix=-nx,nx
-       do iy=-ny,ny
-          do iz=-nz,nz
-             if(.not. math_isclose(den_grid(ix,iy,iz),conjg(den_grid(ix,iy,iz))) ) then
-                casino_check_inver_sym=.false.
-                return
-             end if
-          end do
-       end do
-    end do
-  end function casino_check_inver_sym
 
   subroutine casino_read_recip_grid(den,gvec_int)
     !============================================================!
