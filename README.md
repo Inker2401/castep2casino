@@ -40,21 +40,22 @@ The program is capable of understanding CASTEP input files and parsing them.
 Therefore, the same input parameters you use for CASTEP should work here.
 
 The most basic usage is
-```castep2casino <casino_file> [lat_geom_file]`
-```
-`casino_file` contains the CASINO density.
+```castep2casino <casino_file> [lat_geom_file]```
+where `casino_file` contains the CASINO density.
 
 If you do not specify the `lat_geom_file`, the program will look for it in the form of in the form of `seedname.latt_geom`.
 The `seedname` will be taken from the `casino_file`, i.e. if the CASINO file is named `QMC.txt`, the program will look for the file `QMC.latt`.
 
+<details><summary>User Options</summary>
 
-### User Options
+### Summary
 The `<lat_geom_file>` effectively contains the set of user-defined parameters which are:
 - `prim_latt_cart` block - primitive real lattice vectors.
 - `castep_grid` = the dimensions of the CASTEP grid.
 - `unit_bohr` - unit for real lattice vectors are Bohr. This is an **OPTIONAL** parameter, and otherwise angstroms are used as the input unit.
 - `output_file` - The file to use to write the CASTEP output. This is an **OPTIONAL** parameter.
 
+#### Essential
 The primitive real lattice vectors are specified as follows:
 ```
 %block prim_latt_cart
@@ -75,9 +76,12 @@ For instance, if you needed a grid of size 10 x 20 x 30, you would enter `castep
 
 For the output file, if `output_file` is not specified, the program will use the `lat_geom_file` seedname.
 For example, if you have a file named `QMC.dat` as the lattice geometry file, then the output file will be `QMC.den_fmt`.
+</details>
+
 
 ## Licence
-Copyright (C) 2023 V Ravindran, S J Clark.
+Copyright (C) 2023 V Ravindran
+
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
