@@ -15,7 +15,7 @@ module density
   ! Constants,IO,Basis                                                            !
   ! ------------------------------------------------------------------------------!
   ! Public variables:                                                             !
-  ! electron_density : stores the properties of an electron density               !
+  ! elec_density : stores the properties of an electron density                   !
   !===============================================================================!
   use constants, only : dp
   use basis, only     : castep_basis
@@ -27,14 +27,16 @@ module density
   !                       P u b l i c   V a r i a b l e s                     !
   !---------------------------------------------------------------------------!
 
-  type,public :: electron_density
+  type,public :: elec_density
      ! All grid values are stored times the number of grid points.
      ! E.g. charge density norm is such that the sum(charge)/total_grid_points
      ! is equal to the number of electrons.
      real(kind=dp),allocatable      :: real_charge(:,:,:)  ! real charge density(nx, ny, nz)
      complex(kind=dp),allocatable   :: charge(:,:,:)       ! complex charge density(nx, ny, nz)
      logical                        :: have_cmplx_den      ! have a complex density
-  end type electron_density
+   contains
+     procedure :: norm => density_norm
+  end type elec_density
 
   !---------------------------------------------------------------------------!
   !                       P u b l i c   R o u t i n e s                       !
@@ -69,7 +71,7 @@ contains
     implicit none
 
     ! Arguments
-    type(electron_density),intent(out)   :: den
+    type(elec_density),intent(out)       :: den
     logical, optional,intent(in)         :: cmplx_den
 
     logical :: l_cmplx_den
@@ -103,7 +105,7 @@ contains
     ! den(inout)       :: density to allocate                    !
     !============================================================!
     implicit none
-    type(electron_density),intent(inout) :: den
+    type(elec_density),intent(inout) :: den
     integer :: stat
 
     ! Deallocate real charge, if allocated
@@ -140,7 +142,7 @@ contains
     !============================================================!
     implicit none
 
-    type(electron_density),intent(inout) :: den
+    type(elec_density),intent(inout) :: den
     integer :: stat
 
     ! Check if density is already real
@@ -180,7 +182,7 @@ contains
     !============================================================!
     implicit none
 
-    type(electron_density),intent(inout) :: den
+    type(elec_density),intent(inout) :: den
 
     integer :: stat
 
@@ -219,7 +221,7 @@ contains
     !============================================================!
     use constants,only : cmplx_0
     implicit none
-    type(electron_density),intent(inout) :: den
+    type(elec_density),intent(inout) :: den
     if (den%have_cmplx_den) then
        den%charge = cmplx_0
     else
@@ -232,8 +234,8 @@ contains
 
     implicit none
 
-    type(electron_density),intent(inout)          :: recip_den
-    type(electron_density),intent(inout),optional :: real_den
+    type(elec_density),intent(inout)          :: recip_den
+    type(elec_density),intent(inout),optional :: real_den
 
     complex(kind=dp),allocatable :: real_grid(:,:,:)
 
@@ -307,7 +309,7 @@ contains
     implicit none
 
     ! Arguments
-    type(electron_density),intent(in) :: den     ! density to write to file
+    type(elec_density),intent(in) :: den         ! density to write to file
     character(len=1), intent(in),optional :: fmt ! 'R' - real, 'C' - complex , 'A' - absolute value/complex modulus
 
     ! Local variables
@@ -420,4 +422,28 @@ contains
     if(iostat/=0) error stop 'density_write: Failed to close formatted density file.'
 
   end subroutine density_write
+
+  function density_norm(den) result(norm)
+    !============================================================!
+    ! Calculates the norm (number of electrons) of a charge      !
+    ! density                                                    !
+    !------------------------------------------------------------!
+    ! Necessary Conditions                                       !
+    ! density passed must be allocated and in real space         !
+    !============================================================!
+    use basis,only : castep_basis
+    implicit none
+    class(elec_density), intent(in) :: den
+    real(kind=dp) :: norm
+
+    ! Integrate/sum over all space
+    if (den%have_cmplx_den) then
+       norm = sum(abs(den%charge))
+    else
+       norm = sum(den%real_charge)
+    end if
+
+    ! Divide by the number of grid points for correct normalisation
+    norm = norm/castep_basis%total_grid_points
+  end function density_norm
 end module density

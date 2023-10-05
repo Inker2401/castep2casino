@@ -143,10 +143,10 @@ contains
     !============================================================!
     use io,only : stderr
     use basis, only : castep_basis
-    use density,only: electron_density,density_allocate
+    use density,only: elec_density,density_allocate
 
     implicit none
-    type(electron_density),intent(out) :: den  ! the density in reciprocal space
+    type(elec_density),intent(out) :: den  ! the density in reciprocal space
 
     integer,allocatable :: gvec_int(:,:) ! G-vecs as multiples of recip. latt. vectors
     integer :: min_x,min_y,min_z         ! minimum grid size required
@@ -425,12 +425,12 @@ contains
     ! We deal with this slight difference of convention in this  !
     ! routine!!!!                                                !
     !============================================================!
-    use density,only : electron_density,density_zero
+    use density,only : elec_density,density_zero
     use basis,only   : castep_basis
 
     implicit none
 
-    type(electron_density),intent(inout) :: den
+    type(elec_density),intent(inout) :: den
     integer,intent(in)    :: gvec_int(:,:)
 
     integer :: ix,iy,iz

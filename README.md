@@ -32,6 +32,9 @@ The executable will be located in the root file directory of the repository. If 
 ```make clean```
 then repeat the above steps.
 
+### Known Issues
+Currently, compilation will fail if `Make` is run in parallel using the `-j` flag.
+
 ## Usage
 The program is capable of understanding CASTEP input files and parsing them.
 Therefore, the same input parameters you use for CASTEP should work here.
