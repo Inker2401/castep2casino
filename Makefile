@@ -36,7 +36,7 @@ $(if $(filter-out $(VALID_BUILD), $(BUILD)), \
 	$(error BUILD should be one of: $(VALID_BUILD), not $(BUILD) )\
 )
 $(if $(filter-out $(VALID_FFT), $(FFTLIB)), \
-	$(error BUILD should be one of: $(VALID_BUILD), not $(BUILD) )\
+	$(error FFTLIB should be one of: $(VALID_FFT), not $(FFTLIB) )\
 )
 
 # Set compiler optimisation flags
