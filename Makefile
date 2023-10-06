@@ -71,7 +71,7 @@ OBJ_FILES = $(addprefix $(OBJ_DIR)/, $(MODULES:.f90=.o))
 EXECUTABLE = casino2castep.e
 
 # Set the actual compile command - Do not modify directly
-COMPILE.F90 = $(F90) $(FFLAGS) $(FFTFLAG) $(MOD_FLAGS)
+COMPILE.F90 = $(F90) $(FFLAGS) $(MOD_FLAGS)
 
 # Specify targets
 .phony : all casino2castep clean
@@ -79,7 +79,7 @@ COMPILE.F90 = $(F90) $(FFLAGS) $(FFTFLAG) $(MOD_FLAGS)
 all : casino2castep
 
 casino2castep : $(OBJ_FILES) $(MAIN_FILE)
-	$(COMPILE.F90) $^ -o $(EXECUTABLE)
+	$(COMPILE.F90) $^ $(FFTFLAG) -o $(EXECUTABLE)
 
 clean :
 	rm -rf $(EXECUTABLE) $(OBJ_DIR)
@@ -90,4 +90,4 @@ $(OBJ_DIR) :
 
 # Build the modules
 $(OBJ_DIR)/%.o : $(SRC_DIR)/%.f90 | $(OBJ_DIR)
-	$(COMPILE.F90) -c $< -o $@
+	$(COMPILE.F90) -c $< $(FFTFLAG) -o $@
