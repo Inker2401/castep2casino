@@ -55,6 +55,7 @@ program castep2casino
   call density_deallocate(recip_den)
 
   ! Sanity checks on real space density
+  write(stdout,'(A30,/,A75)') ' Real Space Density Properties', repeat('-',75)
   call check_real_den(real_den)
   write(stdout, '(A21,F12.5)') ' Number of electrons:', real_den%norm()
   if (real_den%have_cmplx_den) then
@@ -64,7 +65,7 @@ program castep2casino
      write(stdout,'(A18,3x,F18.10)') ' Maximum density: ',maxval(real_den%real_charge)
      write(stdout,'(A18,3x,F18.10)') ' Minimum density: ',minval(real_den%real_charge)
   end if
-
+  write(stdout,'(A75)') repeat('-',75)
   ! Write real space density in CASTEP format.
   ! TODO - rather than specifying format manually,density should always be real so we should only need to allocate it as a real type - see previous TODO
   call density_write(real_den,fmt='R')
@@ -165,6 +166,7 @@ contains
     integer :: stat
 
     if (real_den%have_cmplx_den) then
+       write(stdout,'(A67)') ' Checking complex real space density for zero imaginary components.'
        allocate(flat_grid(castep_basis%total_grid_points),stat=stat)
        if(stat/=0) error stop 'check_real_den: Failed to allocated flattened grid.'
        allocate(zero_arr((castep_basis%total_grid_points)))
@@ -176,8 +178,8 @@ contains
        ! Check no non-zero imaginary parts in density (within tolerance!)
        if (.not. math_isclose(flat_grid, zero_arr)) then
           write(stdout,'(A53)') ' WARNING: Real space density appears to be complex...'
-       ! else
-       !    write(stdout,*) 'Real space density is fine...'
+       else
+          write(stdout,'(A36)') ' Real space density is REAL function'
        end if
 
        deallocate(flat_grid,stat=stat)
@@ -185,7 +187,9 @@ contains
        deallocate(zero_arr)
     else
        ! Nothing to check as it is already real
+       write(stdout,'(A52)') ' Real space density is already real valued function.'
        return
     end if
+    write(stdout,*) ''
   end subroutine check_real_den
 end program castep2casino
