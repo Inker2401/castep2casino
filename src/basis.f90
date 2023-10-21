@@ -34,10 +34,17 @@ module basis
   !---------------------------------------------------------------------------!
   !                       P u b l i c   R o u t i n e s                       !
   !---------------------------------------------------------------------------!
+
+  interface basis_shift
+     module procedure basis_shift_cmplx
+     module procedure basis_shift_real
+  end interface basis_shift
+
   public :: basis_initialise
   public :: basis_deallocate
   public :: basis_real_to_recip
   public :: basis_recip_to_real
+  public :: basis_shift
 
   !---------------------------------------------------------------------------!
   !                     P r i v a t e   V a r i a b l e s                     !
@@ -144,4 +151,68 @@ contains
 
     call dfftw_execute_dft(castep_basis%plan_back,grid,grid)
   end subroutine basis_recip_to_real
+
+  subroutine basis_shift_cmplx(grid)
+    !============================================================!
+    ! This routine shifts a real space grid by an amount         !
+    ! specified in fractional coordinates.                       !
+    ! This routine is for real space grids/fields that are       !
+    ! complex-valued.                                            !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! grid(inout) :: the grid to be shifted                      !
+    !------------------------------------------------------------!
+    ! Necessary Conditions                                       !
+    ! basis_initialise must have been called.                    !
+    !============================================================!
+    use latt,only  : user_params
+
+    implicit none
+    complex(kind=dp),intent(inout) :: grid(:,:,:)
+    integer :: xshift,yshift,zshift
+
+    xshift = nint(castep_basis%ngx*user_params%shift_frac(1))
+    yshift = nint(castep_basis%ngy*user_params%shift_frac(2))
+    zshift = nint(castep_basis%ngz*user_params%shift_frac(3))
+
+    ! write(*,*) castep_basis%ngx*user_params%shift_frac(1),castep_basis%ngy*user_params%shift_frac(2),&
+    !      castep_basis%ngz*user_params%shift_frac(3)
+    ! write(*,*) xshift,yshift,zshift
+
+    grid = cshift(grid,xshift,1)
+    grid = cshift(grid,yshift,2)
+    grid = cshift(grid,zshift,3)
+  end subroutine basis_shift_cmplx
+
+  subroutine basis_shift_real(grid)
+    !============================================================!
+    ! This routine shifts a real space grid by an amount         !
+    ! specified in fractional coordinates.                       !
+    ! This routine is for real space grids/fields that are       !
+    ! real-valued.                                               !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! grid(inout) :: the grid to be shifted                      !
+    !------------------------------------------------------------!
+    ! Necessary Conditions                                       !
+    ! basis_initialise must have been called.                    !
+    !============================================================!
+    use latt,only  : user_params
+
+    implicit none
+    real(kind=dp),intent(inout) :: grid(:,:,:)
+    integer :: xshift,yshift,zshift
+
+    xshift = nint(castep_basis%ngx*user_params%shift_frac(1))
+    yshift = nint(castep_basis%ngy*user_params%shift_frac(2))
+    zshift = nint(castep_basis%ngz*user_params%shift_frac(3))
+
+    ! write(*,*) castep_basis%ngx*user_params%shift_frac(1),castep_basis%ngy*user_params%shift_frac(2),&
+    !      castep_basis%ngz*user_params%shift_frac(3)
+    ! write(*,*) xshift,yshift,zshift
+
+    grid = cshift(grid,xshift,1)
+    grid = cshift(grid,yshift,2)
+    grid = cshift(grid,zshift,3)
+  end subroutine basis_shift_real
 end module basis

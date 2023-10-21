@@ -137,9 +137,8 @@ contains
     ! IO,Basis,Density                                           !
     !------------------------------------------------------------!
     ! Necessary Conditions                                       !
-    ! The primitive lattice vectors, platt, from lattice module  !
-    ! must have been initialised via a call to latt_read         !
-    ! casino_read must be called before calling this routine.    !
+    ! The user's input parameters must be initialised via call   !
+    ! to latt_read must be called before calling this routine.   !
     !============================================================!
     use io,only : stderr
     use basis, only : castep_basis
@@ -211,7 +210,7 @@ contains
     ! casino_read must be called before calling this routine.    !
     !============================================================!
     use constants, only : pi
-    use latt, only      : platt
+    use latt, only      : user_params
 
     implicit none
     integer,allocatable,intent(out) :: gvec_int(:,:)
@@ -226,7 +225,7 @@ contains
     ! Multiply each G-vector component by corresponding reciprocal lattice vector
     ! making sure to multiply by pre-factor of 1/2*pi
     do i=1,ngvec
-       gvec_int(i,:) = nint(matmul(platt,gvecs(i,:))/(2.0_dp*pi))
+       gvec_int(i,:) = nint(matmul(user_params%platt,gvecs(i,:))/(2.0_dp*pi))
     end do
 
     ! DEBUG int grid
