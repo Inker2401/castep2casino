@@ -22,10 +22,11 @@ program castep2casino
   !              Department of Physics, University of Durham                        !
   !---------------------------------------------------------------------------------!
   use io,       only : file_maxpath, stdout
-  use latt,     only : latt_read,ngx,ngy,ngz
+  use latt,     only : latt_read,user_params
   use basis,    only : basis_initialise,basis_deallocate
   use casino,   only : casino_read,casino_to_castep
-  use density,  only : elec_density,density_allocate,density_deallocate,density_recip_to_real,density_write
+  use density,  only : elec_density,density_allocate,density_deallocate,density_recip_to_real,density_write,&
+                       density_shift
 
   implicit none
 
@@ -39,7 +40,7 @@ program castep2casino
   call latt_read(trim(latt_file))
 
   ! Initialise FFT grids
-  call basis_initialise(ngx,ngy,ngz)
+  call basis_initialise(user_params%ngx,user_params%ngy,user_params%ngz)
 
   ! Read CASINO file
   call casino_read(trim(casino_file))
@@ -66,9 +67,18 @@ program castep2casino
      write(stdout,'(A18,3x,F18.10)') ' Minimum density: ',minval(real_den%real_charge)
   end if
   write(stdout,'(A75)') repeat('-',75)
+
+  ! Perform shift for visualisation purposes if requested.
+  call density_shift(real_den)
+
   ! Write real space density in CASTEP format.
   ! TODO - rather than specifying format manually,density should always be real so we should only need to allocate it as a real type - see previous TODO
   call density_write(real_den,fmt='R')
+
+  ! Write real space density as Mathematica list
+  if (user_params%write_mathematica) then
+     call write_mathematica(real_den)
+  end if
 
   ! Clean up
   call density_deallocate(real_den)
@@ -132,6 +142,8 @@ contains
     write(stdout,'(A60)') '                otherwise will use angstroms instead.       '
     write(stdout,'(A60)') ' output_file  : name of output file to use                  '
     write(stdout,'(A60)') '             Default - seedname from <casino_file>.den_fmt  '
+    write(stdout,'(A60)') ' shift_grid  : shift the real space density by an amount    '
+    write(stdout,'(A60)') '               in fractional coordinates.                   '
     stop
   end subroutine print_help
 
@@ -192,4 +204,69 @@ contains
     end if
     write(stdout,*) ''
   end subroutine check_real_den
+
+  subroutine write_mathematica(real_den)
+    !============================================================!
+    ! Writes the real space density in the format of a           !
+    ! of a Mathematica list                                      !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! real_den (in) :: the real space density to plot            !
+    !------------------------------------------------------------!
+    ! Necessary Conditions                                       !
+    ! real_den must contain a valid density obviously...         !
+    !============================================================!
+
+    use io,only      : io_strip_extension
+    use basis,only   : castep_basis
+    implicit none
+    type(elec_density),intent(in) :: real_den
+
+    character(len=file_maxpath)   :: filename
+    integer :: unit
+    integer :: ix,iy
+    integer :: iostat
+
+    ! Set filename for Mathematica - take seedname from formatted density file
+    filename = trim(io_strip_extension(trim(user_params%den_fmt_file)))//'.mathematica'
+    write(stdout,'(A35,A)') ' Writing Mathematica list to file: ', trim(filename)
+
+    open(file=trim(filename),newunit=unit,status='REPLACE',action='WRITE',iostat=iostat)
+    if(iostat/=0) error stop 'write_mathematica: Failed to open Mathematica list file.'
+
+    write(unit,*) '{'
+
+    ! Loop over xy planes of the density
+    do ix = 1,castep_basis%ngx
+       write(unit,*) '{'
+       do iy = 1,castep_basis%ngy
+          write(unit,*) '{'
+
+          ! Decide what we are writing
+          if (real_den%have_cmplx_den) then
+             write(unit,"(*(F14.7,:,','))") abs(real_den%charge(ix,iy,:))
+          else
+             write(unit,"(*(F14.7,:,','))") real_den%real_charge(ix,iy,:)
+          end if
+
+          ! If reached end of y, close brackets
+          if(iy==castep_basis%ngy)then
+             write(unit,*)'}'
+          else
+             write(unit,*)'},'
+          end if
+       end do
+
+       ! If reached end of x, close brackets
+       if(ix==castep_basis%ngx)then
+          write(unit,*)'}'
+       else
+          write(unit,*)'},'
+       end if
+    end do
+    write(unit,*) '}'
+
+    close(unit,iostat=iostat)
+    if(iostat/=0) error stop 'write_mathematica: Failed to close mathematica list file.'
+  end subroutine write_mathematica
 end program castep2casino

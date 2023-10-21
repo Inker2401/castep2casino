@@ -48,6 +48,8 @@ module density
   public :: density_zero
   public :: density_recip_to_real
   public :: density_write
+  public :: density_shift
+
 contains
 
   subroutine density_allocate(den,cmplx_den)
@@ -302,7 +304,7 @@ contains
     ! castep_basis should still be initialised                   !
     !============================================================!
     use basis, only : castep_basis
-    use latt,  only : platt,den_fmt_file
+    use latt,  only : user_params
     use basis, only : basis_data
     use io,    only : stderr,stdout
 
@@ -328,14 +330,14 @@ contains
     if(present(fmt)) l_fmt=fmt
 
     ! Open the file
-    open(file=trim(den_fmt_file),newunit=den_unit,status='REPLACE',action='WRITE',&
+    open(file=trim(user_params%den_fmt_file),newunit=den_unit,status='REPLACE',action='WRITE',&
          iostat=iostat,iomsg=iomsg)
     if (iostat/=0) then
        write(stderr,'(A7,A)') 'ERROR: ',trim(iomsg)
        error stop 'density_read: Failed to open density file.'
     end if
 
-    write(stdout,'(A32,A)') ' Writing real space density to: ',trim(den_fmt_file)
+    write(stdout,'(A32,A)') ' Writing real space density to: ',trim(user_params%den_fmt_file)
 
     ! Write the CASTEP file header
     write(den_unit,'(A12)') 'BEGIN header'
@@ -343,9 +345,9 @@ contains
     write(den_unit,'(A)') 'Real Lattice(Bohr)               Lattice parameters(Bohr)    Cell Angles'
 
     ! TODO Get lattice parameters from real lattice
-    write(den_unit,100) (platt(1,i),i=1,3), 5.13157067_dp/sqrt(2.0_dp), 60.0_dp
-    write(den_unit,200) (platt(2,i),i=1,3), 5.13157067_dp/sqrt(2.0_dp), 60.0_dp
-    write(den_unit,300) (platt(3,i),i=1,3), 5.13157067_dp/sqrt(2.0_dp), 60.0_dp
+    write(den_unit,100) (user_params%platt(1,i),i=1,3), 5.13157067_dp/sqrt(2.0_dp), 60.0_dp
+    write(den_unit,200) (user_params%platt(2,i),i=1,3), 5.13157067_dp/sqrt(2.0_dp), 60.0_dp
+    write(den_unit,300) (user_params%platt(3,i),i=1,3), 5.13157067_dp/sqrt(2.0_dp), 60.0_dp
     write(den_unit,*) ''
 100 format(3f14.7,5x,'a =',f12.6,2x,'alpha =',f12.6)
 200 format(3f14.7,5x,'b =',f12.6,2x,'beta  =',f12.6)
@@ -446,4 +448,38 @@ contains
     ! Divide by the number of grid points for correct normalisation
     norm = norm/castep_basis%total_grid_points
   end function density_norm
+
+  subroutine density_shift(den)
+    !============================================================!
+    ! Shift the density on a grid by an amount specified in      !
+    ! fractional coordinates.                                    !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! den(inout) :: the density to be shifted                    !
+    !------------------------------------------------------------!
+    ! Necessary Conditions                                       !
+    ! density passed must be allocated and in real space         !
+    !============================================================!
+    use io,only    : stdout
+    use basis,only : basis_shift
+    use latt,only  : user_params
+
+    implicit none
+
+    type(elec_density),intent(inout) :: den
+
+    ! Perform a shift of the charge density grid but only if requested.
+    if (user_params%shift_grid) then
+       write(*,'(/,A64)') ' WARNING: Shifted real space grid - DO NOT USE FOR CALCULATION!'
+       write(*,'(A20,3F10.5,/)') '  Real space shift: ',user_params%shift_frac
+
+       if (den%have_cmplx_den) then
+          call basis_shift(den%charge)
+       else ! real density
+          call basis_shift(den%real_charge)
+       endif
+
+    end if
+
+  end subroutine density_shift
 end module density

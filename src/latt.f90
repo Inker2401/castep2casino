@@ -13,9 +13,10 @@ module latt
   ! IO, Constants                                                                 !
   !-------------------------------------------------------------------------------!
   ! Public variables:                                                             !
-  ! platt - the set of primitive real lattice vectors (in Bohr)                   !
-  ! den_fmt_file - the output file to write the formatted CASTEP density to       !
+  ! user_params :: the public instance of the params type containing user         !
+  !                user input parameters.                                         !
   !===============================================================================!
+
   use constants, only : dp
   use io, only        : file_maxpath
 
@@ -23,11 +24,16 @@ module latt
   !---------------------------------------------------------------------------!
   !                       P u b l i c   V a r i a b l e s                     !
   !---------------------------------------------------------------------------!
+  type params
+     real(kind=dp),dimension(3,3)   :: platt               ! lattice vector, component
+     character(len=file_maxpath)    :: den_fmt_file        ! name of formatted density file
+     integer                        :: ngx,ngy,ngz         ! CASTEP grid size
+     logical                        :: shift_grid          ! Does user want to shift real space grid?
+     real(kind=dp),allocatable      :: shift_frac(:)       ! the shift applied to the user's grid in fractional coordinates along x,y,z
+     logical                        :: write_mathematica   ! write data to file as a Mathematica list
+  end type params
 
-  real(kind=dp),dimension(3,3),public,save   :: platt         ! lattice vector, component
-  character(len=file_maxpath),public,save    :: den_fmt_file  ! name of formatted density file
-  integer,public,save                        :: ngx,ngy,ngz   ! CASTEP grid size
-
+  type(params),public,save :: user_params   ! public instance of params type
   !---------------------------------------------------------------------------!
   !                       P u b l i c   R o u t i n e s                       !
   !---------------------------------------------------------------------------!
@@ -63,9 +69,9 @@ contains
     character(len=*),intent(in) :: filename
     character(len=file_maxpath),allocatable :: tmpc(:)
 
-    integer :: unit,iostat
     integer :: i
     character(len=60) :: iomsg
+    integer :: unit,iostat,stat
 
     ! Open the file
     open(file=trim(filename),newunit=unit,status='OLD',action='READ',&
@@ -79,44 +85,66 @@ contains
     allocate(tmpc(1))
     if (io_file_present(unit,'castep_grid')) then
        tmpc = trim(io_file_code(unit,'castep_grid',whole=.true.))
-       read(tmpc,*,iostat=iostat) ngx,ngy,ngz
+       read(tmpc,*,iostat=iostat) user_params%ngx,user_params%ngy,user_params%ngz
        if(iostat/=0) error stop 'latt_read: Failed to read CASTEP grid size'
-       write(stdout,'(A20,10x,3I4)') ' CASTEP grid size:  ', ngx, ngy, ngz
+       write(stdout,'(A20,10x,3I4)') ' CASTEP grid size:  ',user_params%ngx,user_params%ngy,user_params%ngz
     else
        stop 'ERROR: Did not specify CASTEP grid size'
     end if
     deallocate(tmpc)
 
     ! Check if the grid contains an odd number of grid points
-    call latt_check_grid(ngx,ngy,ngz)
+    call latt_check_grid(user_params%ngx,user_params%ngy,user_params%ngz,required=.false.)
 
     ! Obtain the user's primitive lattice vectors
     call io_read_block(unit,'prim_latt_cart',tmpc)
     if (size(tmpc)/=3) stop 'ERROR: prim_latt_cart block incorrectly specified.'
     do i=1,3
-       read(tmpc(i),*,iostat=iostat) platt(i,1), platt(i,2), platt(i,3)
+       read(tmpc(i),*,iostat=iostat) user_params%platt(i,1), user_params%platt(i,2), user_params%platt(i,3)
        if(iostat/=0) error stop 'latt_read: Failed to read prim_latt_cart block'
     end do
     deallocate(tmpc)
 
     ! Now convert the lattice vectors to Bohr (if required)
     if (.not.io_file_present(unit,'unit_bohr')) then
-       platt = platt/bohr_radius
+       user_params%platt = user_params%platt/bohr_radius
     end if
 
     write(stdout,'(15x,"Real Lattice (",A1,")", 40x, "Real Lattice (",A4,")")') 'A', 'Bohr'
     do i=1,3
-       write(stdout,100) platt(i,:)*bohr_radius, platt(i,:)
+       write(stdout,100) user_params%platt(i,:)*bohr_radius, user_params%platt(i,:)
     end do
-    write(*,*) ''
 100 format(3f16.10,5x,3f16.10)
 
     ! Get density output file
-    den_fmt_file = trim(io_strip_extension(trim(filename)))//'.den_fmt'
+    user_params%den_fmt_file = trim(io_strip_extension(trim(filename)))//'.den_fmt'
     if (io_file_present(unit,'output_file')) then
-       den_fmt_file = trim(io_file_code(unit,'output_file'))
+       user_params%den_fmt_file = trim(io_file_code(unit,'output_file'))
     end if
 
+    ! Check if user wants to perform a shift of grid for visualisation purposes
+    user_params%shift_grid=.false.
+    if (io_file_present(unit,'shift_grid')) then
+       allocate(tmpc(1))
+       allocate(user_params%shift_frac(3),stat=stat)
+       if(stat/=0) error stop 'Failed to allocate shift_frac'
+
+       ! Get shift in fractional coordinates
+       tmpc = trim(io_file_code(unit,'shift_grid',whole=.true.))
+       read(tmpc,*,iostat=iostat) user_params%shift_frac(1),user_params%shift_frac(2),user_params%shift_frac(3)
+       deallocate(tmpc)
+
+       ! Set flag to true
+       user_params%shift_grid=.true.
+       write(*,'(A18,3F13.6)') ' Real Space Shift:', user_params%shift_frac
+    end if
+    ! write(*,*) 'shift_user_grid: ', user_params%shift_grid
+
+    ! Write real space density as Mathematica list - WRITE_MATHEMATICA
+    user_params%write_mathematica=io_file_present(unit,'write_mathematica')
+
+    write(stdout,*) ''
+    ! Finished reading parameters
     close(unit,iostat=iostat)
     if(iostat/=0) error stop 'casino_read: Failed to close lattice geometry file.'
   end subroutine latt_read
