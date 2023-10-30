@@ -82,7 +82,7 @@ contains
     end if
 
     ! Obtain the number of G-vectors
-    call io_skip_header(unit,ngvec_header)
+    call io_skip_header(unit,ngvec_header,case_sensitive=.true.) ! Make case sensitive just in case file format changes...
     read(unit,*,iostat=iostat) ngvec
     if(iostat/=0) error stop 'casino_read: Failed to read number of G-vectors'
     write(stdout,'(A22,I7)') ' Number of G-vectors: ', ngvec
@@ -90,7 +90,7 @@ contains
     ! Obtain the G-vectors
     allocate(gvecs(ngvec,3),stat=stat)
     if(stat/=0) error stop 'casino_read: Failed to allocate G-vectors array.'
-    call io_skip_header(unit,gvec_header)
+    call io_skip_header(unit,gvec_header,case_sensitive=.true.)
     do i=1,ngvec
        read(unit,*,iostat=iostat) gvecs(i,:)
        if(iostat/=0) error stop 'casino_read: Failed to read G-vectors'
@@ -105,7 +105,7 @@ contains
     ! Obtain the Fourier components
     allocate(rho_gs(ngvec),stat=stat)
     if(stat/=0) error stop 'casino_read: Failed to allocate Fourier components array.'
-    call io_skip_header(unit,rho_g_header)
+    call io_skip_header(unit,rho_g_header,case_sensitive=.true.)
     do i=1,ngvec
        read(unit,*,iostat=iostat) rho_gs(i)
        if(iostat/=0) error stop 'casino_read: Failed to read Fourier components'

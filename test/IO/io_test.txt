@@ -1,0 +1,12 @@
+This is my file
+END HEADER
+Contents start here
+
+%BLOCK MY_BLOCK
+LINE 1
+LINE 2
+LINE 3
+%ENDBLOCK MY_BLOCK
+
+GRID_SIZE 5 5
+NPARTICLES 25

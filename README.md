@@ -46,6 +46,8 @@ where `casino_file` contains the CASINO density.
 If you do not specify the `lat_geom_file`, the program will look for it in the form of in the form of `seedname.latt_geom`.
 The `seedname` will be taken from the `casino_file`, i.e. if the CASINO file is named `QMC.txt`, the program will look for the file `QMC.latt`.
 
+Note that keywords are case-insensitive.
+
 <details><summary>User Options</summary>
 
 ### Summary

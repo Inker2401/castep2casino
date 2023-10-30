@@ -124,7 +124,7 @@ contains
     ! Get density output file
     user_params%den_fmt_file = trim(io_strip_extension(trim(filename)))//'.den_fmt'
     if (io_file_present(unit,'output_file')) then
-       user_params%den_fmt_file = trim(io_file_code(unit,'output_file'))
+       user_params%den_fmt_file = trim(io_file_code(unit,'output_file',code_keep_case=.true.))
     end if
 
     ! Check if user wants to perform a shift of grid for visualisation purposes
