@@ -1,0 +1,11 @@
+castep_grid 45 45 45
+
+%block prim_latt_cart
+0.000000000000     5.131570673767     5.131570673767
+5.131570673767     0.000000000000     5.131570673767
+5.131570673767     5.131570673767     0.000000000000
+%endblock prim_latt_cart
+
+unit_bohr
+output_file Si_QMC.den_fmt
+

@@ -28,6 +28,7 @@ module math
   !                       P u b l i c   R o u t i n e s                       !
   !---------------------------------------------------------------------------!
   public :: math_isclose
+  public :: math_get_vec_angle
 contains
 
   logical function math_isclose_cmplx(a,b,atol,rtol)
@@ -167,4 +168,31 @@ contains
        end if
     end do
   end function math_aisclose_real
+
+  function math_get_vec_angle(a,b) result(theta)
+    !============================================================!
+    ! Calculate the angle theta between two vectors in degrees   !
+    ! noting that a dot b = |a||b|cos(theta)                     !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! a(in) :: the first vector                                  !
+    ! b(in) :: the second vector                                 !
+    !------------------------------------------------------------!
+    ! Necesary Conditions                                        !
+    ! a and b must be arrays with dimension(3).                  !
+    !============================================================!
+    use constants, only : pi
+
+    implicit none
+    real(kind=dp),dimension(:) :: a,b
+    real(kind=dp) :: theta
+    real(kind=dp) :: norm_a,norm_b
+
+    ! Calculate the norm of the two vectors
+    norm_a = sqrt(sum(a**2))
+    norm_b = sqrt(sum(b**2))
+
+    theta = acos(dot_product(a,b)/(norm_a*norm_b))
+    theta = theta * 180.0_dp/pi
+  end function math_get_vec_angle
 end module math

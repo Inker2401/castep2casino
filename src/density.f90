@@ -342,12 +342,11 @@ contains
     ! Write the CASTEP file header
     write(den_unit,'(A12)') 'BEGIN header'
     write(den_unit,*) ''
-    write(den_unit,'(A)') 'Real Lattice(Bohr)               Lattice parameters(Bohr)    Cell Angles'
+    write(den_unit,'(15x,A)') 'Real Lattice(Bohr)               Lattice parameters(Bohr)    Cell Angles'
 
-    ! TODO Get lattice parameters from real lattice
-    write(den_unit,100) (user_params%platt(1,i),i=1,3), 5.13157067_dp/sqrt(2.0_dp), 60.0_dp
-    write(den_unit,200) (user_params%platt(2,i),i=1,3), 5.13157067_dp/sqrt(2.0_dp), 60.0_dp
-    write(den_unit,300) (user_params%platt(3,i),i=1,3), 5.13157067_dp/sqrt(2.0_dp), 60.0_dp
+    write(den_unit,100) (user_params%platt(1,i),i=1,3), user_params%lat_consts(1), user_params%lat_angles(1)
+    write(den_unit,200) (user_params%platt(2,i),i=1,3), user_params%lat_consts(2), user_params%lat_angles(2)
+    write(den_unit,300) (user_params%platt(3,i),i=1,3), user_params%lat_consts(3), user_params%lat_angles(3)
     write(den_unit,*) ''
 100 format(3f14.7,5x,'a =',f12.6,2x,'alpha =',f12.6)
 200 format(3f14.7,5x,'b =',f12.6,2x,'beta  =',f12.6)

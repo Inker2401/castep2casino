@@ -26,6 +26,8 @@ module latt
   !---------------------------------------------------------------------------!
   type params
      real(kind=dp),dimension(3,3)   :: platt               ! lattice vector, component
+     real(kind=dp),dimension(3)     :: lat_consts          ! lattice constants (in Bohr) a,b,c
+     real(kind=dp),dimension(3)     :: lat_angles          ! lattice angles (in degrees) alpha,beta,gamma
      character(len=file_maxpath)    :: den_fmt_file        ! name of formatted density file
      integer                        :: ngx,ngy,ngz         ! CASTEP grid size
      logical                        :: shift_grid          ! Does user want to shift real space grid?
@@ -116,6 +118,9 @@ contains
     end do
 100 format(3f16.10,5x,3f16.10)
 
+    ! Calculate the lattice constants - NB output is handled within latt_calc_const_and_angles
+    call latt_calc_const_and_angles()
+
     ! Get density output file
     user_params%den_fmt_file = trim(io_strip_extension(trim(filename)))//'.den_fmt'
     if (io_file_present(unit,'output_file')) then
@@ -195,4 +200,59 @@ contains
        end if
     end if
   end subroutine latt_check_grid
+
+  subroutine latt_calc_const_and_angles(silent)
+    !============================================================!
+    ! Calculates the lattice angles and lattice constants from   !
+    ! lattice vectors.                                           !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    !------------------------------------------------------------!
+    ! silent(in,optional) :: do not output calculated results    !
+    !                        (Default : False)                   !
+    !------------------------------------------------------------!
+    ! Modules used                                               !
+    ! math,constants,stdout                                      !
+    !------------------------------------------------------------!
+    ! Necessary Conditions                                       !
+    ! The primitive lattice vectors contained in                 !
+    ! user_params%platt must contain the valid set of            !
+    ! lattice vectors (in Bohr!!) before this routine is called. !
+    !============================================================!
+    use math, only : math_get_vec_angle
+    use constants, only : bohr_radius
+    use io, only : stdout
+
+    implicit none
+    logical,intent(in),optional :: silent
+    logical :: l_silent
+
+    integer :: dir
+    character(len=1), dimension(3), parameter :: side_labels=(/ 'a','b','c' /)
+    character(len=5), dimension(3), parameter :: angle_labels=(/ 'alpha','beta ','gamma' /)
+
+    l_silent=.false.
+    if(present(silent))l_silent=silent
+
+    ! Norm of lattice vector gives the lattice constant
+    do dir=1,3
+       user_params%lat_consts(dir) = sqrt(sum(user_params%platt(dir,:)**2))
+    end do
+
+    ! Now get angles
+    user_params%lat_angles(1) = math_get_vec_angle(user_params%platt(2,:),user_params%platt(3,:))
+    user_params%lat_angles(2) = math_get_vec_angle(user_params%platt(1,:),user_params%platt(3,:))
+    user_params%lat_angles(3) = math_get_vec_angle(user_params%platt(1,:),user_params%platt(2,:))
+
+    if (.not.l_silent) then
+       write(stdout,*) ''
+       write(stdout,'(35x,A18)') 'Lattice Parameters'
+       do dir=1,3
+          write(stdout,101) side_labels(dir), user_params%lat_consts(dir)*bohr_radius, user_params%lat_consts(dir), &
+               angle_labels(dir), user_params%lat_angles(dir)
+       end do
+       write(stdout,*) ''
+    end if
+101 format(10x,A1,' = ',f14.8,' A  = ',f14.8,' Bohr, ',A5,' = ',f12.6)
+  end subroutine latt_calc_const_and_angles
 end module latt

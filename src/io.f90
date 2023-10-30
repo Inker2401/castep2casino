@@ -56,6 +56,92 @@ contains
     seedname = filename(:extpos-1)
   end function io_strip_extension
 
+  function io_lowercase(str) result(lower_str)
+    !============================================================!
+    ! This routine takes a string and turns everything into      !
+    ! lower case                                                 !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! str(in) :: the string to turn into lower case              !
+    !============================================================!
+    implicit none
+    character(len=*),intent(in) :: str
+    character(len=len(str))     :: lower_str
+
+    integer :: ia, iz, ic, ishift
+    integer :: i
+
+    ! Get indexes in for lower case characters in character set
+    ia=ichar('A')
+    iz=ichar('Z')
+    ishift = ichar('a') - ia
+
+    do i=1,len(str)
+       ic = ichar(str(i:i))
+
+       if((ic>=ia .and. ic<=iz)) then
+          ! If upper case, convert to lower case
+          lower_str(i:i) = char(ic+ishift)
+       else
+          lower_str(i:i) = str(i:i)
+       end if
+    end do
+
+    ! Check for non ASCII characters (note each is 2 bytes)
+    do i=1,len(lower_str)-1
+       select case(lower_str(i:i+1))
+       ! German umlauts and scharfes S
+       case('Ä')
+          lower_str(i:i+1)='ä'
+       case('Ö')
+          lower_str(i:i+1)='ö'
+       case('Ü')
+          lower_str(i:i+1)='ü'
+       case('ẞ')
+          lower_str(i:i+1)='ß'
+       ! Acute accents
+       case('Á')
+          lower_str(i:i+1)='á'
+       case('É')
+          lower_str(i:i+1)='é'
+       case('Í')
+          lower_str(i:i+1)='í'
+       case('Ó')
+          lower_str(i:i+1)='ó'
+       case('Ú')
+          lower_str(i:i+1)='ú'
+       ! Grave accents
+       case('À')
+          lower_str(i:i+1)='à'
+       case('È')
+          lower_str(i:i+1)='è'
+       case('Ì')
+          lower_str(i:i+1)='ì'
+       case('Ò')
+          lower_str(i:i+1)='ò'
+       case('Ù')
+          lower_str(i:i+1)='ù'
+       ! Cedilla
+       case('Ç')
+          lower_str(i:i+1)='ç'
+       ! Circumflex accents
+       case('Â')
+          lower_str(i:i+1)='â'
+       case('Ê')
+          lower_str(i:i+1)='ê'
+       case('Î')
+          lower_str(i:i+1)='î'
+       case('Ô')
+          lower_str(i:i+1)='ô'
+       case('Û')
+          lower_str(i:i+1)='û'
+       ! Spanish eñe
+       case('Ñ')
+          lower_str(i:i+1)='ñ'
+       end select
+   end do
+  end function io_lowercase
+
   subroutine io_skip_header(unit,header)
     !============================================================!
     ! This routine skips past the header or to a point in a file !
