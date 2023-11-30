@@ -69,6 +69,9 @@ contains
     character(len=25),parameter :: gvec_header='G vectors (Hartree a.u.):'
     character(len=38),parameter :: rho_g_header='Fourier coefficients of density set 1:'
 
+    ! For writing G-vectors to a file
+    character(len=15),parameter :: untrun_gfile='untrun_rhoG.txt'
+
     integer :: unit,iostat,stat
     integer :: i
     character(len=60) :: iomsg
@@ -119,10 +122,65 @@ contains
     ! write(*,*) rho_gs(ngvec-1)
     ! write(*,*) rho_gs(ngvec)
 
+    ! Write the Fourier components out as an absolute G-vector out to a file
+    write(stdout,'(A53,A,/)') ' Writing out Fourier components planewave energy to: ',trim(untrun_gfile)
+    call casino_plot_Gs(untrun_gfile)
+
     close(unit,iostat=iostat,status='KEEP')
     if(iostat/=0) error stop 'casino_read: Failed to close CASINO file.'
 
   end subroutine casino_read
+
+  subroutine casino_plot_Gs(g_filename)
+    !============================================================!
+    ! Write the Fourier components of the density as a function  !
+    ! of the planewave energy |G|^2/2  to a file                 !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! g_filename(in) : filename containing the G-vectors         !
+    !------------------------------------------------------------!
+    ! Modules used                                               !
+    ! IO                                                         !
+    !------------------------------------------------------------!
+    ! Parent module variables used                               !
+    ! rho_gs : the components of the charge density in reciprocal!
+    !          space                                             !
+    ! gvecs  : the G-vectors at which the charge density is      !
+    !          non-zero in reciprocal space                      !
+    !------------------------------------------------------------!
+    ! Necessary conditions                                       !
+    ! casino_read should be called before calling this routine   !
+    !============================================================!
+
+    use io, only : file_maxpath
+
+    implicit none
+
+    ! Arguments
+    character(len=*),intent(in) :: g_filename
+    integer :: g_unit
+    character(len=90) :: iomsg
+
+    integer :: i
+    integer :: iostat
+
+    open(file=trim(g_filename),newunit=g_unit,status='UNKNOWN',action='WRITE',iostat=iostat,iomsg=iomsg)
+    if(iostat/=0) then
+       write(stdout,*) trim(iomsg)
+       stop 'casino_plot_Gs: Failed to open file'
+    end if
+
+    ! Write a header so we know what we have
+    write(g_unit,'(A30)') '#      |G|^2/2(Ha)     |rho_G|'
+    ! Now write the planewave cutoffs |G|^2/2 and the Fourier components of the density.
+    do i=1,size(rho_gs)
+       ! NOTE: Here we take the absolute value as the density coefficients can in general be real if we don't have inversion symmetry.
+       write(g_unit,'(F18.10,ES20.11)') sum(gvecs(i,:)**2.0_dp)/2.0_dp, abs(rho_gs(i))
+    end do
+
+    close(g_unit,iostat=iostat)
+    if(iostat/=0) error stop 'casino_plot_Gs: Failed to close file.'
+  end subroutine casino_plot_Gs
 
   subroutine casino_to_castep(den)
     !============================================================!
