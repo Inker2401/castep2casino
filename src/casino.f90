@@ -320,7 +320,7 @@ contains
     ! casino_read must be called before calling this routine.    !
     !============================================================!
     use constants,only : cmplx_0
-    use basis,only : castep_basis
+    use basis,    only : castep_basis
 
     implicit none
     integer,intent(in) :: gvec_int(:,:)
@@ -348,13 +348,12 @@ contains
        den_grid(gvec_int(i,1),gvec_int(i,2),gvec_int(i,3)) = rho_gs(i)
     end do
 
-    ! First check for complex conjugate symmetry
+    ! First check for complex conjugate symmetry - this is REQUIRED or we have done something wrong!
     if(.not.casino_check_cmplx_conj(den_grid,nx,ny,nz)) then
        error stop 'Reciprocal space density does not appear to have complex conjugate symmetry'
-    ! else
-    !    write(stdout,*) ' Reciprocal density has complex conjugate symmetry. <-- SYMMETRY_CHECK'
     end if
 
+    ! Now check for inversion symmetry - not necessary unless it's actually there!
     l_inv_sym = casino_check_inver_sym(den_grid,nx,ny,nz)
     if(.not.l_inv_sym) then
        write(stdout,'(A61)') ' Reciprocal space density does not have inversion symmetry   '
@@ -407,7 +406,7 @@ contains
       do ix=0,nx
          do iy=0,ny
             do iz=0,nz
-               if(.not. math_isclose(den_grid(ix,iy,iz),den_grid(-ix,-iy,-iz)) ) then
+               if(.not. math_isclose(den_grid(ix,iy,iz), conjg(den_grid(-ix,-iy,-iz))) ) then
                   casino_check_cmplx_conj=.false.
                   return
                end if
