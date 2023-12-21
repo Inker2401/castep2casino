@@ -68,7 +68,7 @@ c_x c_y c_z
 ```
 
 The default input unit for the lattice vectors are ANGSTROMS.
-You may alternatively put the string `latt_bohr` anywhere in the cell file and then enter the lattice vectors in atomic units (Bohr).
+You may alternatively put the string `unit_bohr` anywhere in the cell file and then enter the lattice vectors in atomic units (Bohr).
 
 The second thing you must specify is the required CASTEP grid size. This is likewise done in the `lat_geom_file` through the parameter
 ```
