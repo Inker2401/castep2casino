@@ -63,7 +63,7 @@ contains
     ! filename must point to a FORMATTED file                    !
     !============================================================!
     use constants, only  : bohr_radius
-    use io, only         : file_maxpath,stdout,io_file_present,io_file_code,io_read_block,&
+    use io, only         : file_maxpath,stdout,stderr,io_file_present,io_file_code,io_read_block,&
                            io_strip_extension
     implicit none
 
@@ -79,7 +79,7 @@ contains
     open(file=trim(filename),newunit=unit,status='OLD',action='READ',&
          iostat=iostat,iomsg=iomsg)
     if(iostat/=0) then
-       write(*,'(A7,A)') 'ERROR: ',trim(iomsg)
+       write(stderr,'(A7,A)') 'ERROR: ',trim(iomsg)
        stop
     end if
 
@@ -141,7 +141,7 @@ contains
 
        ! Set flag to true
        user_params%shift_grid=.true.
-       write(*,'(A18,3F13.6)') ' Real Space Shift:', user_params%shift_frac
+       write(stdout,'(A18,3F13.6)') ' Real Space Shift:', user_params%shift_frac
     end if
     ! write(*,*) 'shift_user_grid: ', user_params%shift_grid
 
@@ -172,7 +172,7 @@ contains
     ! Modules used                                               !
     ! IO                                                         !
     !============================================================!
-    use io, only : stderr,stdout
+    use io, only : stderr
     implicit none
     integer,intent(in)          :: ngx,ngy,ngz  ! user's CASTEP grid size along x, y and z
     logical,intent(in),optional :: required     ! do we raise this as an error(true) just a warning(false)

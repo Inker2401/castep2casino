@@ -152,8 +152,6 @@ contains
     ! casino_read should be called before calling this routine   !
     !============================================================!
 
-    use io, only : file_maxpath
-
     implicit none
 
     ! Arguments

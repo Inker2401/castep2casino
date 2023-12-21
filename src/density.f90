@@ -469,8 +469,8 @@ contains
 
     ! Perform a shift of the charge density grid but only if requested.
     if (user_params%shift_grid) then
-       write(*,'(/,A64)') ' WARNING: Shifted real space grid - DO NOT USE FOR CALCULATION!'
-       write(*,'(A20,3F10.5,/)') '  Real space shift: ',user_params%shift_frac
+       write(stdout,'(/,A64)') ' WARNING: Shifted real space grid - DO NOT USE FOR CALCULATION!'
+       write(stdout,'(A20,3F10.5,/)') '  Real space shift: ',user_params%shift_frac
 
        if (den%have_cmplx_den) then
           call basis_shift(den%charge)
