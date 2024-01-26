@@ -32,10 +32,16 @@ module density
      ! E.g. charge density norm is such that the sum(charge)/total_grid_points
      ! is equal to the number of electrons.
      real(kind=dp),allocatable      :: real_charge(:,:,:)  ! real charge density(nx, ny, nz)
+     real(kind=dp),allocatable      :: real_spin(:,:,:)    ! real spin density(nx,ny,nz)
      complex(kind=dp),allocatable   :: charge(:,:,:)       ! complex charge density(nx, ny, nz)
+     complex(kind=dp),allocatable   :: spin(:,:,:)         ! complex spin density(nx,ny,nz)
      logical                        :: have_cmplx_den      ! have a complex density
+     integer                        :: nspins              ! number of spin components
+                                                           ! 1 - spin degenerate
+                                                           ! 2 - spin polarised
    contains
      procedure :: norm => density_norm
+     procedure :: mag_moment => density_mag_moment
   end type elec_density
 
   !---------------------------------------------------------------------------!
@@ -45,19 +51,22 @@ module density
   public :: density_deallocate
   public :: density_complex_to_real
   public :: density_real_to_complex
-  public :: density_zero
   public :: density_recip_to_real
   public :: density_write
   public :: density_shift
+  public :: density_to_spin_ch
 
 contains
 
-  subroutine density_allocate(den,cmplx_den)
+  subroutine density_allocate(den,nspins,cmplx_den)
     !============================================================!
     ! Allocates an electron density based for a given grid       !
     !------------------------------------------------------------!
     ! Arguments                                                  !
     ! den(out)       :: density to allocate                      !
+    ! nspins(in)     :: number of spin components                !
+    !                   1 - spin degenerate                      !
+    !                   2 - spin polarised                       !
     ! cmplx_den(in)  :: is the density complex (default: true)   !
     !------------------------------------------------------------!
     ! Modules used                                               !
@@ -74,6 +83,7 @@ contains
 
     ! Arguments
     type(elec_density),intent(out)       :: den
+    integer, intent(in)                  :: nspins
     logical, optional,intent(in)         :: cmplx_den
 
     logical :: l_cmplx_den
@@ -82,6 +92,14 @@ contains
     ! Decide if density is real or complex(assume complex unless told otherwise)
     l_cmplx_den=.true.
     if(present(cmplx_den)) l_cmplx_den = cmplx_den
+
+    ! Get number of spin components
+    select case(nspins)
+    case (1,2)
+       den%nspins = nspins
+    case default
+       error stop 'density_allocate: nspins should be 1 or 2.'
+    end select
 
     ! Set the appropriate flag in density
     den%have_cmplx_den = l_cmplx_den
@@ -94,7 +112,20 @@ contains
     else ! real charge density
        allocate(den%real_charge(castep_basis%ngx,castep_basis%ngy,castep_basis%ngz),stat=stat)
        if(stat/=0) error stop 'density_allocate: Failed to allocate real charge density'
-       den%charge=0.0_dp
+       den%real_charge=0.0_dp
+    end if
+
+    ! Allocate spin and initialise with zeroes.
+    if ( den%nspins==2) then
+       if (den%have_cmplx_den) then
+          allocate(den%spin(castep_basis%ngx,castep_basis%ngy,castep_basis%ngz),stat=stat)
+          if(stat/=0) error stop 'density_allocate: Failed to allocate complex spin density'
+          den%spin=cmplx_0
+       else ! real spin density
+          allocate(den%real_spin(castep_basis%ngx,castep_basis%ngy,castep_basis%ngz),stat=stat)
+          if(stat/=0) error stop 'density_allocate: Failed to allocate real spin density'
+          den%real_spin=0.0_dp
+       end if
     end if
   end subroutine density_allocate
 
@@ -122,8 +153,23 @@ contains
        if(stat/=0) error stop 'density_deallocate: Failed to deallocate complex charge density'
     end if
 
+    ! Deallocate real spin, if allocated
+    if(allocated(den%real_spin))then
+       deallocate(den%real_spin, stat=stat)
+       if(stat/=0) error stop 'density_deallocate: Failed to deallocate real spin density'
+    end if
+
+    ! Deallocate complex spin, if allocated
+    if(allocated(den%spin))then
+       deallocate(den%spin, stat=stat)
+       if(stat/=0) error stop 'density_deallocate: Failed to deallocate complex spin density'
+    end if
+
     ! Reset complex flag to true
     den%have_cmplx_den=.true.
+
+    ! Reset spins to 1
+    den%nspins = 1
   end subroutine density_deallocate
 
   subroutine density_complex_to_real(den)
@@ -163,6 +209,20 @@ contains
        den%have_cmplx_den=.false.
        deallocate(den%charge,stat=stat)
        if (stat/=0) error stop 'density_complex_to_real: Failed to deallocate complex charge.'
+
+       ! Do the same with spin densities
+       if (den%nspins==2) then
+          allocate(den%real_spin(castep_basis%ngx,castep_basis%ngy,castep_basis%ngz),stat=stat)
+          if (stat/=0) error stop 'density_complex_to_real: Failed to allocate real spin.'
+
+          ! Now copy spin over
+          den%real_spin=real(den%spin,dp)
+
+          ! Deallocate complex spin and set appropriate flag
+          den%have_cmplx_den=.false.
+          deallocate(den%spin,stat=stat)
+          if (stat/=0) error stop 'density_complex_to_real: Failed to deallocate complex spin.'
+       end if
     end if
   end subroutine density_complex_to_real
 
@@ -204,34 +264,42 @@ contains
        den%have_cmplx_den=.true.
        deallocate(den%real_charge,stat=stat)
        if (stat/=0) error stop 'density_real_to_complex: Failed to deallocate real charge.'
+
+       if (den%nspins==2) then
+          ! Allocate complex spin
+          allocate(den%spin(castep_basis%ngx,castep_basis%ngy,castep_basis%ngz),stat=stat)
+          if (stat/=0) error stop 'density_real_to_complex: Failed to allocate complex spin.'
+
+          ! Now copy spin over
+          den%spin=cmplx(den%real_spin,0.0_dp,dp)
+
+          ! Deallocate real spin and set appropriate flag
+          den%have_cmplx_den=.true.
+          deallocate(den%real_spin,stat=stat)
+          if (stat/=0) error stop 'density_real_to_complex: Failed to deallocate real spin.'
+       end if
     end if
   end subroutine density_real_to_complex
 
-  ! TODO Remove redundant routine - initialisation is already done in density_allocate
-  subroutine density_zero(den)
+  subroutine density_recip_to_real(recip_den,real_den)
     !============================================================!
-    ! Initialises the charge density to zero everywhere on a grid!
+    ! Transforms a density in reciprocal space to a density      !
+    ! in real space.                                             !
+    ! The real space density overwrites the existing density     !
+    ! data in recip_den unless real_den is specified in which    !
+    ! case it is placed there.                                   !
     !------------------------------------------------------------!
     ! Arguments                                                  !
-    ! den(inout) :: the density to be initialised with zeros     !
+    ! recip_den(inout) : the reciprocal space density            !
+    ! real_den(inout),optional : the density in whcih we should  !
+    !                            store the FFT of recip_den      !
     !------------------------------------------------------------!
     ! Modules used                                               !
-    ! Constants                                                  !
+    ! Basie                                                      !
     !------------------------------------------------------------!
-    ! Necessary Conditions                                       !
-    ! Density should be allocated                                !
+    ! Necessary conditions                                       !
+    ! If real_den is supplied, it should be allocated            !
     !============================================================!
-    use constants,only : cmplx_0
-    implicit none
-    type(elec_density),intent(inout) :: den
-    if (den%have_cmplx_den) then
-       den%charge = cmplx_0
-    else
-       den%real_charge = 0.0_dp
-    end if
-  end subroutine density_zero
-
-  subroutine density_recip_to_real(recip_den,real_den)
     use basis,only : castep_basis,basis_recip_to_real
 
     implicit none
@@ -245,6 +313,12 @@ contains
 
     allocate(real_grid(castep_basis%ngx,castep_basis%ngy,castep_basis%ngz),stat=stat)
     if(stat/=0) error stop 'density_recip_to_real: Failed to allocate real space grid.'
+
+    ! Sanity check that the real and reciprocal space densities have the same number of spins
+    if (present(real_den)) then
+       if(real_den%nspins/=recip_den%nspins) &
+            error stop 'density_real_to_recip: Real and reciprocal space densities do not have same nspins!'
+    end if
 
     ! Initialise real space grid for charge density and initialise with reciprocal space grid
     if (recip_den%have_cmplx_den) then
@@ -271,14 +345,40 @@ contains
        endif
     end if
 
+    ! Now do the same thing with spins if needed
+    if (recip_den%nspins==2) then
+       ! Initialise real space grid for spin density and initialise with reciprocal space grid
+       if (recip_den%have_cmplx_den) then
+          real_grid = recip_den%spin
+       else
+          real_grid = cmplx(recip_den%real_spin,0.0_dp,dp)
+       end if
+
+       ! Perform the Fourier transform to get into real space.
+       call basis_recip_to_real(real_grid)
+
+       ! Store results of Fourier transform appropriately.
+       if (present(real_den)) then
+          if (real_den%have_cmplx_den) then
+             real_den%spin = real_grid
+          else
+             real_den%real_spin = real(real_grid,dp)
+          endif
+       else
+          if (recip_den%have_cmplx_den) then
+             recip_den%spin = real_grid
+          else
+             recip_den%real_spin = real(real_grid,dp)
+          endif
+       end if
+    end if
+
     ! Clean up
     deallocate(real_grid,stat=stat)
     if(stat/=0) error stop 'density_recip_to_real: Failed to deallocate real space grid.'
   end subroutine density_recip_to_real
 
-  ! TODO density_real_to_recip
-
-  subroutine density_write(den,fmt)
+  subroutine density_write(den,den_file,fmt)
     !============================================================!
     ! Write the density on a grid in a format that CASTEP        !
     ! understands.                                               !
@@ -291,13 +391,11 @@ contains
     !------------------------------------------------------------!
     ! Arguments                                                  !
     ! den(inout) :: the density to be modified                   !
+    ! den_file(in) :: file to write the density to               !
+    ! fmt(in), optional :: format to use when writing            !
     !------------------------------------------------------------!
     ! Modules used                                               !
     ! None                                                       !
-    !------------------------------------------------------------!
-    ! Known issues                                               !
-    ! Lattice parameters are hard-coded rather than calculated   !
-    ! afresh.                                                    !
     !------------------------------------------------------------!
     ! Necessary Conditions                                       !
     ! den contains a valid density                               !
@@ -312,6 +410,7 @@ contains
 
     ! Arguments
     type(elec_density),intent(in) :: den         ! density to write to file
+    character(len=*), intent(in)          :: den_file ! file to write density to
     character(len=1), intent(in),optional :: fmt ! 'R' - real, 'C' - complex , 'A' - absolute value/complex modulus
 
     ! Local variables
@@ -330,14 +429,12 @@ contains
     if(present(fmt)) l_fmt=fmt
 
     ! Open the file
-    open(file=trim(user_params%den_fmt_file),newunit=den_unit,status='REPLACE',action='WRITE',&
+    open(file=trim(den_file),newunit=den_unit,status='REPLACE',action='WRITE',&
          iostat=iostat,iomsg=iomsg)
     if (iostat/=0) then
        write(stderr,'(A7,A)') 'ERROR: ',trim(iomsg)
        error stop 'density_read: Failed to open density file.'
     end if
-
-    write(stdout,'(A32,A)') ' Writing real space density to: ',trim(user_params%den_fmt_file)
 
     ! Write the CASTEP file header
     write(den_unit,'(A12)') 'BEGIN header'
@@ -353,7 +450,7 @@ contains
 300 format(3f14.7,5x,'c =',f12.6,2x,'gamma =',f12.6)
 
     ! Write spin information and grid information
-    write(den_unit,'(A58)') '1   F                        ! nspins, non-collinear spin'
+    write(den_unit,'(1x,I1,3x,A53)') den%nspins, 'F                        ! nspins, non-collinear spin'
     write(den_unit,'(3(i4,2x),T30,a)') castep_basis%ngx,castep_basis%ngy,castep_basis%ngz, &
          '! fine FFT grid along <a,b,c>'
     select case(l_fmt)
@@ -376,11 +473,21 @@ contains
           do iy=1,castep_basis%ngy
              do iz=1,castep_basis%ngz
                 if(den%have_cmplx_den)then
-                   write(den_unit,'(3I6,f20.12)') ix,iy,iz, &
-                        abs(den%charge(ix,iy,iz))
+                   if(den%nspins==2) then
+                      write(den_unit,'(3I6,2f20.12)') ix,iy,iz, &
+                           abs(den%charge(ix,iy,iz)), abs(den%spin(ix,iy,iz))
+                   else
+                      write(den_unit,'(3I6,f20.12)') ix,iy,iz, &
+                           abs(den%charge(ix,iy,iz))
+                   end if
                 else
-                   write(den_unit,'(3I6,f20.12)') ix,iy,iz, &
-                        abs(den%real_charge(ix,iy,iz))
+                   if(den%nspins==2) then
+                      write(den_unit,'(3I6,2f20.12)') ix,iy,iz, &
+                           abs(den%real_charge(ix,iy,iz)), abs(den%real_spin(ix,iy,iz))
+                   else
+                      write(den_unit,'(3I6,f20.12)') ix,iy,iz, &
+                           abs(den%real_charge(ix,iy,iz))
+                   end if
                 end if
              end do
           end do
@@ -392,11 +499,21 @@ contains
           do iy=1,castep_basis%ngy
              do iz=1,castep_basis%ngz
                 if(den%have_cmplx_den)then
-                   write(den_unit,'(3I6,f20.12)') ix,iy,iz, &
-                        real(den%charge(ix,iy,iz),dp)
+                   if(den%nspins==2) then
+                      write(den_unit,'(3I6,2f20.12)') ix,iy,iz, &
+                           real(den%charge(ix,iy,iz),dp), real(den%spin(ix,iy,iz),dp)
+                   else
+                      write(den_unit,'(3I6,f20.12)') ix,iy,iz, &
+                           real(den%charge(ix,iy,iz),dp)
+                   end if
                 else
-                   write(den_unit,'(3I6,f20.12)') ix,iy,iz, &
-                        den%real_charge(ix,iy,iz)
+                   if(den%nspins==2) then
+                      write(den_unit,'(3I6,2f20.12)') ix,iy,iz, &
+                           den%real_charge(ix,iy,iz), den%real_spin(ix,iy,iz)
+                   else
+                      write(den_unit,'(3I6,f20.12)') ix,iy,iz, &
+                           den%real_charge(ix,iy,iz)
+                   end if
                 end if
              end do
           end do
@@ -408,11 +525,21 @@ contains
           do iy=1,castep_basis%ngy
              do iz=1,castep_basis%ngz
                 if(den%have_cmplx_den)then
-                   write(den_unit,'(3I6,2f20.12)') ix,iy,iz, &
-                        den%charge(ix,iy,iz)
+                   if(den%nspins==2) then
+                      write(den_unit,'(3I6,2f20.12)') ix,iy,iz, &
+                           den%charge(ix,iy,iz), den%spin(ix,iy,iz)
+                   else
+                      write(den_unit,'(3I6,f20.12)') ix,iy,iz, &
+                           den%charge(ix,iy,iz)
+                   end if
                 else
-                   write(den_unit,'(3I6,2f20.12)') ix,iy,iz, &
-                        cmplx(den%real_charge(ix,iy,iz),0.0_dp,dp)
+                   if(den%nspins==2) then
+                      write(den_unit,'(3I6,2f20.12)') ix,iy,iz, &
+                           cmplx(den%real_charge(ix,iy,iz),0.0_dp,dp), cmplx(den%real_spin(ix,iy,iz),0.0_dp,dp)
+                   else
+                      write(den_unit,'(3I6,f20.12)') ix,iy,iz, &
+                           cmplx(den%real_charge(ix,iy,iz),0.0_dp,dp)
+                   end if
                 end if
              end do
           end do
@@ -439,7 +566,7 @@ contains
 
     ! Integrate/sum over all space
     if (den%have_cmplx_den) then
-       norm = sum(abs(den%charge))
+       norm = abs(sum(den%charge))
     else
        norm = sum(den%real_charge)
     end if
@@ -447,6 +574,44 @@ contains
     ! Divide by the number of grid points for correct normalisation
     norm = norm/castep_basis%total_grid_points
   end function density_norm
+
+  function density_mag_moment(den,absval) result(mag_moment)
+    !============================================================!
+    ! Calculates the (abs) magnetic moment for a spin density    !
+    ! in atomic units                                            !
+    !------------------------------------------------------------!
+    ! Necessary Conditions                                       !
+    ! density passed must be allocated and in real space         !
+    ! den%nspins=2, i.e. must have a spin density                !
+    !============================================================!
+    use basis,only : castep_basis
+    implicit none
+    class(elec_density), intent(in) :: den
+    logical,intent(in),optional     :: absval
+
+    real(kind=dp) :: mag_moment
+    logical :: l_abs
+    l_abs = .false.
+    if(present(absval)) l_abs = absval
+
+    ! Integrate/sum over all space
+    if (den%have_cmplx_den) then
+       if (l_abs) then
+          mag_moment = sum(abs(real(den%spin,dp)))
+       else
+          mag_moment = sum(real(den%spin,dp))
+       end if
+    else
+       if (l_abs) then
+          mag_moment = abs(sum(den%real_spin))
+       else
+          mag_moment = sum(den%real_spin)
+       end if
+    end if
+
+    ! Divide by the number of grid points for correct normalisation
+    mag_moment = mag_moment/castep_basis%total_grid_points
+  end function density_mag_moment
 
   subroutine density_shift(den)
     !============================================================!
@@ -474,11 +639,47 @@ contains
 
        if (den%have_cmplx_den) then
           call basis_shift(den%charge)
+          if(den%nspins==2) call basis_shift(den%spin)
        else ! real density
           call basis_shift(den%real_charge)
+          if(den%nspins==2) call basis_shift(den%real_spin)
        endif
 
     end if
 
   end subroutine density_shift
+
+  subroutine density_to_spin_ch(den1,den2)
+    !============================================================!
+    ! Turn charge and spin density into the density for each     !
+    ! spin channel, i.e. rho^up and rho^down                     !
+    ! These are stored in the charge and spin arrays of the      !
+    ! electron_density type respectively.                        !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! den1(in)  :: charge and spin density                       !
+    ! den2(out) :: density for each spin channel                 !
+    !============================================================!
+    implicit none
+    type(elec_density), intent(in)  :: den1
+    type(elec_density), intent(out) :: den2
+
+    ! If no spin, then we have nothing to do
+    if (den1%nspins/=2) return
+
+    if (den1%have_cmplx_den) then
+       call density_allocate(den2,2,.true.)
+    else
+       call density_allocate(den2,2,.false.)
+    end if
+
+    if (den1%have_cmplx_den) then
+       den2%charge = (den1%charge + den1%spin)/2.0_dp
+       den2%spin =(den1%charge - den1%spin)/2.0_dp
+    else
+       den2%real_charge = (den1%real_charge + den1%real_spin)/2.0_dp
+       den2%real_spin =(den1%real_charge - den1%real_spin)/2.0_dp
+    end if
+
+  end subroutine density_to_spin_ch
 end module density

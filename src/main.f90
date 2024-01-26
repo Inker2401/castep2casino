@@ -26,12 +26,14 @@ program castep2casino
   use basis,    only : basis_initialise,basis_deallocate
   use casino,   only : casino_read,casino_to_castep
   use density,  only : elec_density,density_allocate,density_deallocate,density_recip_to_real,density_write,&
-                       density_shift
+                       density_shift, density_to_spin_ch
+  use constants,only : dp
 
   implicit none
 
   character(len=file_maxpath) :: casino_file, latt_file ! CASINO file, lattice geometry (user options) file
   type(elec_density)          :: recip_den,real_den     ! the density on a grid in reciprocal space, real space
+  type(elec_density)          :: den_spin_ch ! rho^up and rho^down
 
   ! Get arguments from the command line
   call get_input_files(casino_file,latt_file)
@@ -50,7 +52,7 @@ program castep2casino
 
   ! Perform FFT from reciprocal space to real space
   ! TODO - if we know it is going to be real, e.g. inversion symmetry, should allocate real instead
-  call density_allocate(real_den)
+  call density_allocate(real_den,recip_den%nspins)
   call density_recip_to_real(recip_den,real_den)
   ! Done with reciprocal space density, can deallocate it now.
   call density_deallocate(recip_den)
@@ -58,13 +60,20 @@ program castep2casino
   ! Sanity checks on real space density
   write(stdout,'(A30,/,A75)') ' Real Space Density Properties', repeat('-',75)
   call check_real_den(real_den)
+
   write(stdout, '(A21,F12.5)') ' Number of electrons:', real_den%norm()
   if (real_den%have_cmplx_den) then
-     write(stdout,'(A18,3x,F18.10)') ' Maximum density: ',maxval(abs(real_den%charge))
-     write(stdout,'(A18,3x,F18.10)') ' Minimum density: ',minval(abs(real_den%charge))
+     write(stdout,'(A18,3x,F18.10)') ' Maximum density: ',maxval(real(real_den%charge,dp))
+     write(stdout,'(A18,3x,F18.10)') ' Minimum density: ',minval(real(real_den%charge,dp))
   else
      write(stdout,'(A18,3x,F18.10)') ' Maximum density: ',maxval(real_den%real_charge)
      write(stdout,'(A18,3x,F18.10)') ' Minimum density: ',minval(real_den%real_charge)
+  end if
+
+  if (real_den%nspins==2) then
+     write(stdout,*) ''
+     write(stdout,'(A30,ES18.8)') ' 2*Integrated Spin Density:   ', real_den%mag_moment(absval=.false.)
+     write(stdout,'(A30,ES18.8)') ' 2*Integrated |Spin Density|: ', real_den%mag_moment(absval=.true.)
   end if
   write(stdout,'(A75)') repeat('-',75)
 
@@ -73,11 +82,20 @@ program castep2casino
 
   ! Write real space density in CASTEP format.
   ! TODO - rather than specifying format manually,density should always be real so we should only need to allocate it as a real type - see previous TODO
-  call density_write(real_den,fmt='R')
+  write(stdout,'(/,A32,A)') ' Writing real space density to: ',trim(user_params%den_fmt_file)
+  call density_write(real_den,user_params%den_fmt_file,fmt='R')
 
   ! Write real space density as Mathematica list
   if (user_params%write_mathematica) then
      call write_mathematica(real_den)
+  end if
+
+  if (real_den%nspins==2) then
+     write(stdout,'(A)') 'Writing rho^up and rho^down to rho_up_down.den_fmt'
+     call density_to_spin_ch(real_den,den_spin_ch)
+     call density_deallocate(real_den)
+     call density_write(den_spin_ch,'rho_up_down.den_fmt',fmt='R')
+     call density_deallocate(den_spin_ch)
   end if
 
   ! Clean up
@@ -269,4 +287,5 @@ contains
     close(unit,iostat=iostat)
     if(iostat/=0) error stop 'write_mathematica: Failed to close mathematica list file.'
   end subroutine write_mathematica
+
 end program castep2casino

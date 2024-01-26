@@ -24,13 +24,17 @@ module casino
   !---------------------------------------------------------------------------!
   !                       P u b l i c   V a r i a b l e s                     !
   !---------------------------------------------------------------------------!
-  integer,public,save                      :: ngvec       ! number of G-vectors
-  real(kind=dp),public,save,allocatable    :: gvecs(:,:)  ! Gvector, component
-  complex(kind=dp),public,save,allocatable :: rho_gs(:)   ! Fourier components of the density
+  integer,public,save                      :: ngvec         ! number of G-vectors
+  integer,public,save                      :: nspins        ! number of spins in density
 
   !---------------------------------------------------------------------------!
   !                     P r i v a t e   V a r i a b l e s                     !
   !---------------------------------------------------------------------------!
+  real(kind=dp),save,allocatable           :: gvecs(:,:)    ! Gvector, component
+  complex(kind=dp),save,allocatable        :: charge_gs(:)  ! Fourier components of total charge density
+                                                            ! i.e. rho^up + rho^down
+  complex(kind=dp),save,allocatable        :: spin_gs(:)    ! Fourier components of total charge density
+                                                            ! i.e. rho^up - rho^down
 
   !---------------------------------------------------------------------------!
   !                       P u b l i c   R o u t i n e s                       !
@@ -55,6 +59,19 @@ contains
     ! Modules used                                               !
     ! IO                                                         !
     !------------------------------------------------------------!
+    ! Key internal variables                                     !
+    ! rho_gs : - Fourier component for the density of each spin  !
+    !            channel, i.e rho^up and rho^down                !
+    !            These are normalised to the number of electrons !
+    !            for each spin                                   !
+    !------------------------------------------------------------!
+    ! Parent variables used                                      !
+    ! ngvec: number of G-vectors                                 !
+    ! charge_gs : Fourier components of total charge density     !
+    !             rho = rho^up + rho^down                        !
+    ! spin_gs   : Fourier components of total spin density       !
+    !             s = rho^up - rho^down                          !
+    !------------------------------------------------------------!
     ! Necessary Conditions                                       !
     ! filename must point to a FORMATTED file                    !
     !============================================================!
@@ -67,14 +84,18 @@ contains
     ! File headers to skip past in CASINO file
     character(len=20),parameter :: ngvec_header='Number of G vectors:'
     character(len=25),parameter :: gvec_header='G vectors (Hartree a.u.):'
-    character(len=38),parameter :: rho_g_header='Fourier coefficients of density set 1:'
+    character(len=27),parameter :: nspins_header='Number of charge densities:'
+    character(len=38),parameter :: rho_g_header_up='Fourier coefficients of density set 1:'
+    character(len=38),parameter :: rho_g_header_down='Fourier coefficients of density set 2:'
 
     ! For writing G-vectors to a file
     character(len=15),parameter :: untrun_gfile='untrun_rhoG.txt'
-
     integer :: unit,iostat,stat
     integer :: i
     character(len=60) :: iomsg
+
+    complex(kind=dp),allocatable :: rho_gs(:,:)   ! Fourier components of the density for each spin channel, spin,
+                                                  ! i.e. rho^up rho^down
 
     ! Open the file
     open(file=trim(filename),newunit=unit,status='OLD',action='READ',&
@@ -105,56 +126,95 @@ contains
     ! write(*,*) gvecs(ngvec-1,:)
     ! write(*,*) gvecs(ngvec,:)
 
-    ! Obtain the Fourier components
-    allocate(rho_gs(ngvec),stat=stat)
+    ! Obtain the number of spins 05/12/2023
+    call io_skip_header(unit,nspins_header,case_sensitive=.true.)
+    read(unit,*,iostat=iostat) nspins
+    if(iostat/=0) error stop 'casino_read: Failed to read number of spins.'
+    select case(nspins)
+    case(1,2)
+       write(stdout,'(A28,I1)') ' Number of spin components: ', nspins
+    case default
+       stop 'casino_read: Error in CASINO file. Should have only 1 or 2 spin components!'
+    end select
+
+    ! Obtain the Fourier components...
+    allocate(rho_gs(ngvec,nspins),stat=stat)
     if(stat/=0) error stop 'casino_read: Failed to allocate Fourier components array.'
-    call io_skip_header(unit,rho_g_header,case_sensitive=.true.)
+    call io_skip_header(unit,rho_g_header_up,case_sensitive=.true.)
     do i=1,ngvec
-       read(unit,*,iostat=iostat) rho_gs(i)
+       read(unit,*,iostat=iostat) rho_gs(i,1)
        if(iostat/=0) error stop 'casino_read: Failed to read Fourier components'
     end do
 
+    ! ... remembering to do the second spin if we have it
+    if (nspins==2) then
+       call io_skip_header(unit,rho_g_header_down,case_sensitive=.true.)
+       do i=1,ngvec
+          read(unit,*,iostat=iostat) rho_gs(i,2)
+          if(iostat/=0) error stop 'casino_read: Failed to read Fourier components for second spin component'
+       end do
+    end if
+
     ! DEBUG Fourier componets
     ! write(*,*) 'Fourier components'
-    ! write(*,*) rho_gs(1)
-    ! write(*,*) rho_gs(2)
-    ! write(*,*) rho_gs(ngvec-2)
-    ! write(*,*) rho_gs(ngvec-1)
-    ! write(*,*) rho_gs(ngvec)
+    ! write(*,*) rho_gs(1,1)
+    ! write(*,*) rho_gs(2,1)
+    ! write(*,*) rho_gs(ngvec-2,1)
+    ! write(*,*) rho_gs(ngvec-1,1)
+    ! write(*,*) rho_gs(ngvec,1)
+
+    ! Now turn the densities into total charge densities and spin densities
+    ! NOTE that the density for each spin channel is normalised to the number of electrons for that channel
+    allocate(charge_gs(ngvec),stat=stat)
+    if(stat/=0) error stop 'casino_read: Failed to allocate total charge density'
+    if (nspins==2) then
+       charge_gs = rho_gs(:,1) + rho_gs(:,2)
+       allocate(spin_gs(ngvec),stat=stat)
+       if(stat/=0) error stop 'casino_read: Failed to allocate spin density'
+       spin_gs = rho_gs(:,1) - rho_gs(:,2)
+    else
+       charge_gs = rho_gs(:,1)
+    end if
+
+    ! We have the total charge density and spin density so we don't need the ones for each spin channel anymore
+    deallocate(rho_gs,stat=stat)
+    if(stat/=0) error stop 'casino_read: Failed to deallocate rho_gs'
 
     ! Write the Fourier components out as an absolute G-vector out to a file
-    write(stdout,'(A53,A,/)') ' Writing out Fourier components planewave energy to: ',trim(untrun_gfile)
-    call casino_plot_Gs(untrun_gfile)
+    write(stdout,'(A56,A,/)') ' Writing out planewave energy of Fourier components to: ',trim(untrun_gfile)
+    call casino_plot_Gs(charge_gs,untrun_gfile)
 
     close(unit,iostat=iostat,status='KEEP')
     if(iostat/=0) error stop 'casino_read: Failed to close CASINO file.'
 
   end subroutine casino_read
 
-  subroutine casino_plot_Gs(g_filename)
+  subroutine casino_plot_Gs(den_gs,g_filename)
     !============================================================!
     ! Write the Fourier components of the density as a function  !
     ! of the planewave energy |G|^2/2  to a file                 !
     !------------------------------------------------------------!
     ! Arguments                                                  !
+    ! den_gs(in)     : the Fourier components of charge/spin     !
+    !                  density                                   !
     ! g_filename(in) : filename containing the G-vectors         !
     !------------------------------------------------------------!
     ! Modules used                                               !
     ! IO                                                         !
     !------------------------------------------------------------!
     ! Parent module variables used                               !
-    ! rho_gs : the components of the charge density in reciprocal!
-    !          space                                             !
+    ! ngvec     : number of G-vectors                            !
+    !                                                            !
     ! gvecs  : the G-vectors at which the charge density is      !
     !          non-zero in reciprocal space                      !
     !------------------------------------------------------------!
     ! Necessary conditions                                       !
     ! casino_read should be called before calling this routine   !
     !============================================================!
-
     implicit none
 
     ! Arguments
+    complex(kind=dp),intent(in) :: den_gs(:)
     character(len=*),intent(in) :: g_filename
     integer :: g_unit
     character(len=90) :: iomsg
@@ -171,9 +231,9 @@ contains
     ! Write a header so we know what we have
     write(g_unit,'(A30)') '#      |G|^2/2(Ha)     |rho_G|'
     ! Now write the planewave cutoffs |G|^2/2 and the Fourier components of the density.
-    do i=1,size(rho_gs)
+    do i=1,ngvec
        ! NOTE: Here we take the absolute value as the density coefficients can in general be real if we don't have inversion symmetry.
-       write(g_unit,'(F18.10,ES20.11)') sum(gvecs(i,:)**2.0_dp)/2.0_dp, abs(rho_gs(i))
+       write(g_unit,'(F18.10,ES20.11)') sum(gvecs(i,:)**2.0_dp)/2.0_dp, abs(den_gs(i))
     end do
 
     close(g_unit,iostat=iostat)
@@ -192,13 +252,17 @@ contains
     ! Modules used                                               !
     ! IO,Basis,Density                                           !
     !------------------------------------------------------------!
+    ! Parent module variables used                               !
+    ! charge_gs, spin_gs : Fourier components of charge/spin     !
+    !                      densities                             !
+    !------------------------------------------------------------!
     ! Necessary Conditions                                       !
     ! The user's input parameters must be initialised via call   !
     ! to latt_read must be called before calling this routine.   !
     !============================================================!
-    use io,only : stderr
-    use basis, only : castep_basis
-    use density,only: elec_density,density_allocate
+    use io,     only : stderr
+    use basis,  only : castep_basis
+    use density,only : elec_density
 
     implicit none
     type(elec_density),intent(out) :: den  ! the density in reciprocal space
@@ -236,11 +300,11 @@ contains
     end if
 
     ! Check for symmetries in the density just to make sure it's been read in correctly.
-    call casino_check_symmetry(gvec_int)
+    call casino_check_symmetry(charge_gs,gvec_int,label='C')
+    if(nspins==2) call casino_check_symmetry(spin_gs,gvec_int,label='S')
+    write(stdout,*) ''
 
-    ! Now we read the density for real
-    ! TODO - Seeing as its real for inversion symmetry, we can reduce memory costs and gain speed for FFT using the corresponding real routines.
-    call density_allocate(den)
+    ! Now we store the non-zero reciprocal space density components onto a grid
     call casino_read_recip_grid(den,gvec_int)
 
   end subroutine casino_to_castep
@@ -260,13 +324,17 @@ contains
     ! Modules used                                               !
     ! Constants,latt                                             !
     !------------------------------------------------------------!
+    ! Parent module variables used                               !
+    ! gvecs : the G-vectors in reciprocal space in units of      !
+    !         inverse Bohr                                       !
+    !------------------------------------------------------------!
     ! Necessary Conditions                                       !
     ! The primitive lattice vectors, platt, from lattice module  !
     ! must have been initialised via a call to latt_read         !
     ! casino_read must be called before calling this routine.    !
     !============================================================!
     use constants, only : pi
-    use latt, only      : user_params
+    use latt,      only : user_params
 
     implicit none
     integer,allocatable,intent(out) :: gvec_int(:,:)
@@ -299,16 +367,21 @@ contains
     end if
   end subroutine casino_G_to_int
 
-  subroutine casino_check_symmetry(gvec_int,have_inv_sym)
+  subroutine casino_check_symmetry(dens_gs, gvec_int,have_inv_sym, label)
     !============================================================!
     ! This routine checks the CASINO density to ensure that we   !
     ! have the correct expected symmetries.                      !
     !------------------------------------------------------------!
     ! Arguments                                                  !
+    ! dens_gs(in)  : the Fourier components of the density       !
+    !                (either total charge/spin density)          !
     ! gvec_int(in) : G-vectors as integer multiples of recip     !
     !                 lattice vectors.                           !
-    ! have_inv_sym(out) : Does the density have inversion        !
-    !                     symmetry                               !
+    ! have_inv_sym(out), optional : Does the density             !
+    !                     have inversion symmetry                !
+    ! label(in,optional): label for density                      !
+    !                     C-charge                               !
+    !                     S-spin                                 !
     !------------------------------------------------------------!
     ! Modules used                                               !
     ! Constants,Basis                                            !
@@ -321,15 +394,30 @@ contains
     use basis,    only : castep_basis
 
     implicit none
-    integer,intent(in) :: gvec_int(:,:)
+    complex(kind=dp),intent(in)  :: dens_gs(:)
+    integer,intent(in)           :: gvec_int(:,:)
     logical,intent(out),optional :: have_inv_sym    ! Does density have inversion symmetry
+    character          ,optional :: label           ! label to use when writing output
+
+    character :: l_label
+    character(6) :: tmpstr
 
     complex(kind=dp),allocatable :: den_grid(:,:,:) ! Temporary complex grid for symmetries
+    integer   :: nx,ny,nz    ! max symmetric grid length along x,y,z
+    logical   :: l_inv_sym   ! local copy of inv_sym
+    integer   :: i           ! loop counters
+    integer   :: stat
 
-    integer :: nx,ny,nz    ! max symmetric grid length along x,y,z
-    logical :: l_inv_sym   ! local copy of inv_sym
-    integer :: i           ! loop counters
-    integer :: stat
+    l_label = 'C'
+
+    ! Set the label to use when writing out the density
+    if (present(label)) l_label = label
+    select case (l_label)
+    case('C')
+       tmpstr = 'charge'
+    case('S')
+       tmpstr = 'spin'
+    end select
 
     ! Find out max grid length needed for number of points
     nx = (castep_basis%ngx-1)/2
@@ -343,7 +431,7 @@ contains
     ! Pad with zeros and then overwrite with non-zero Fourier components
     den_grid = cmplx_0
     do i=1,ngvec
-       den_grid(gvec_int(i,1),gvec_int(i,2),gvec_int(i,3)) = rho_gs(i)
+       den_grid(gvec_int(i,1),gvec_int(i,2),gvec_int(i,3)) = dens_gs(i)
     end do
 
     ! First check for complex conjugate symmetry - this is REQUIRED or we have done something wrong!
@@ -354,11 +442,10 @@ contains
     ! Now check for inversion symmetry - not necessary unless it's actually there!
     l_inv_sym = casino_check_inver_sym(den_grid,nx,ny,nz)
     if(.not.l_inv_sym) then
-       write(stdout,'(A61)') ' Reciprocal space density does not have inversion symmetry   '
+       write(stdout,'(A)') ' Reciprocal space '//trim(tmpstr)//' density does not have inversion symmetry   '
     else
-       write(stdout,'(A61)') ' SYMMETRY DETECTED: Reciprocal density has inversion symmetry'
+       write(stdout,'(A)') ' SYMMETRY DETECTED: Reciprocal space '//trim(tmpstr)//' density has inversion symmetry'
     end if
-    write(stdout,*) ''
 
     if(present(have_inv_sym))have_inv_sym=l_inv_sym
 
@@ -476,11 +563,12 @@ contains
     ! Necessary Conditions                                       !
     ! gvec_int should contain grid locations assuming a symmetric!
     ! grid, i.e. from -nx to nx, rather than 1 to 2*nx+1         !
+    !                                                            !
     ! We deal with this slight difference of convention in this  !
     ! routine!!!!                                                !
     !============================================================!
-    use density,only : elec_density,density_zero
-    use basis,only   : castep_basis
+    use density,only : elec_density, density_allocate
+    use basis,  only : castep_basis
 
     implicit none
 
@@ -490,8 +578,9 @@ contains
     integer :: ix,iy,iz
     integer :: i
 
-    ! Zero the density
-    call density_zero(den)
+    ! TODO - Seeing as its real for inversion symmetry, we can reduce memory costs and gain speed for FFT using the corresponding real routines.
+    ! Allocate and initialise densities with zero
+    call density_allocate(den,nspins)
 
     ! Now read in non-zero Fourier components
     do i=1,ngvec
@@ -504,9 +593,11 @@ contains
        if(iy<1) iy = castep_basis%ngy+iy
        if(iz<1) iz = castep_basis%ngz+iz
        if (den%have_cmplx_den) then
-          den%charge(ix,iy,iz) = rho_gs(i)
+          den%charge(ix,iy,iz) = charge_gs(i)
+          if(nspins==2) den%spin(ix,iy,iz) = spin_gs(i)
        else
-          den%real_charge(ix,iy,iz) = real(rho_gs(i),dp)
+          den%real_charge(ix,iy,iz) = real(charge_gs(i),dp)
+          if(nspins==2) den%real_spin(ix,iy,iz) = real(spin_gs(i),dp)
        end if
     end do
   end subroutine casino_read_recip_grid

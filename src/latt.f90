@@ -63,8 +63,8 @@ contains
     ! filename must point to a FORMATTED file                    !
     !============================================================!
     use constants, only  : bohr_radius
-    use io, only         : file_maxpath,stdout,stderr,io_file_present,io_file_code,io_read_block,&
-                           io_strip_extension
+    use io, only         : file_maxpath,stdout,io_file_present,io_file_code,io_read_block,&
+                           io_strip_extension,stderr
     implicit none
 
     ! File variables
@@ -96,7 +96,7 @@ contains
     deallocate(tmpc)
 
     ! Check if the grid contains an odd number of grid points
-    call latt_check_grid(user_params%ngx,user_params%ngy,user_params%ngz,required=.false.)
+    call latt_check_grid(user_params%ngx,user_params%ngy,user_params%ngz)
 
     ! Obtain the user's primitive lattice vectors
     call io_read_block(unit,'prim_latt_cart',tmpc)
@@ -167,10 +167,12 @@ contains
     ! ngx,ngy,ngz(in) :: number of points along each grid dim    !
     ! required(in) :: Do we halt execution and return an error   !
     !                 or just return a warning                   !
-    !                 (Default: True - return error and stop)    !
+    !                 (Default: False - just want and continue)  !
     !------------------------------------------------------------!
     ! Modules used                                               !
     ! IO                                                         !
+    !------------------------------------------------------------!
+    ! Updated 01/12/2023 so that default required=.false.        !
     !============================================================!
     use io, only : stderr
     implicit none
@@ -179,7 +181,7 @@ contains
                                                 ! (Default: true)
     logical :: bad_vals    ! are the number of grid points sufficient
     logical :: l_require
-    l_require = .true.
+    l_require = .false.
     if(present(required))l_require=required
 
     ! Check if grids contain odd number of grid points
