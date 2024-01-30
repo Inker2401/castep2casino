@@ -232,7 +232,7 @@ contains
     write(g_unit,'(A30)') '#      |G|^2/2(Ha)     |rho_G|'
     ! Now write the planewave cutoffs |G|^2/2 and the Fourier components of the density.
     do i=1,ngvec
-       ! NOTE: Here we take the absolute value as the density coefficients can in general be real if we don't have inversion symmetry.
+       ! NOTE: Here we take the absolute value as the density coefficients can in general be complex if we don't have inversion symmetry.
        write(g_unit,'(F18.10,ES20.11)') sum(gvecs(i,:)**2.0_dp)/2.0_dp, abs(den_gs(i))
     end do
 
