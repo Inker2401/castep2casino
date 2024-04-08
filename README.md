@@ -80,6 +80,17 @@ For the output file, if `output_file` is not specified, the program will use the
 For example, if you have a file named `QMC.dat` as the lattice geometry file, then the output file will be `QMC.den_fmt`.
 </details>
 
+### Truncation of Charge Density
+If you want to truncate the high coefficient Gs beyond a certain cutoff, you can do this using the keyword
+using the keyword `ke_cutoff` which will take a value _in Hartrees_ which corresponds to
+$$E_\mathrm{cut} = \frac{1}{2}|\mathbf{G}_\textrm{max}|^2$$
+Any Fourier components $\rho_\mathbf{G}$ at a $|\mathbf{G}|\geq|\mathbf{G}_\textrm{max}|$ will be set to zero.
+
+A plot of the Fourier components will be produced which you can disable using the keyword `no_write_untrun_g`.
+The reason for doing is mainly to deal with Fourier aliasing from a noisy charge density.
+A possible metric used in the program is to find out how much the _negative_ part of the charge density integrates to
+(obviously a physical charge density is positive $\rho(\mathbf{r}) \geq 0$!)
+
 
 ## Licence
 Copyright (C) 2023 V Ravindran
