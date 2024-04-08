@@ -42,6 +42,7 @@ module casino
   public :: casino_read
   public :: casino_to_castep
   public :: casino_check_symmetry
+  public :: casino_truncate_gs
 
 contains
 
@@ -76,6 +77,7 @@ contains
     ! filename must point to a FORMATTED file                    !
     !============================================================!
     use io,only : io_skip_header
+    use latt, only : user_params
 
     implicit none
 
@@ -180,9 +182,11 @@ contains
     deallocate(rho_gs,stat=stat)
     if(stat/=0) error stop 'casino_read: Failed to deallocate rho_gs'
 
-    ! Write the Fourier components out as an absolute G-vector out to a file
-    write(stdout,'(A56,A,/)') ' Writing out planewave energy of Fourier components to: ',trim(untrun_gfile)
-    call casino_plot_Gs(charge_gs,untrun_gfile)
+    if(.not. user_params%no_write_untrun_g) then
+       ! Write the Fourier components out as an absolute G-vector out to a file
+       write(stdout,'(A56,A,/)') ' Writing out planewave energy of Fourier components to: ',trim(untrun_gfile)
+       call casino_plot_Gs(charge_gs,untrun_gfile)
+    end if
 
     close(unit,iostat=iostat,status='KEEP')
     if(iostat/=0) error stop 'casino_read: Failed to close CASINO file.'
@@ -601,4 +605,89 @@ contains
        end if
     end do
   end subroutine casino_read_recip_grid
+
+  subroutine casino_truncate_gs(cutoff,write_gs)
+    !============================================================!
+    ! Sets all Fourier components of the charge density outside  !
+    ! the sphere of radius |G_cut| in reciprocal space to zero.  !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! cutoff(in) : cutoff radius to truncate the G-vectors at    !
+    ! write_gs(in,optional) : write out the truncated G-vectors  !
+    !                         to a file.  (Default: False)       !
+    !------------------------------------------------------------!
+    ! Modules used                                               !
+    ! constants, io                                              !
+    !------------------------------------------------------------!
+    ! Necessary conditions                                       !
+    ! casino_read should be called BEFORE this routine so that   !
+    ! charge_gs and spin_gs are allocated and initialised.       !
+    !============================================================!
+
+    use constants, only : cmplx_0, eV
+    use io,        only : stderr
+
+    implicit none
+    ! Arguments
+    real(dp),intent(in)           :: cutoff    ! Planewave cutoff |G_cut|^2/2 after which Fourier components should be set to zero (Hartrees)
+    logical, intent(in), optional :: write_gs  ! write out truncated G-vectors to a file
+
+    ! Local Variables
+    character(len=*), parameter :: g_file='trun_rho_g.txt'
+    logical :: l_write_gs
+
+    real(dp):: g_ke               ! Planewave cutoff of a given G-vector
+    real(dp):: ke_max             ! Maximum planewave cutoff of the given set of G-vectors (i.e. what the calculation used)
+    integer :: ndel               ! number of Fourier components we removed
+
+    integer :: ng
+
+    l_write_gs = .false.
+    if (present(write_gs)) l_write_gs=write_gs
+
+    ! Check that we have the data in the right format allocated already.
+    if(.not.allocated(charge_gs)) error stop 'casino_truncate_gs: Reciprocal charge Fourier components not allocated/stored.'
+    if(.not.allocated(spin_gs).and.nspins==2) &
+         error stop 'casino_truncate_gs: Reciprocal spin Fourier components not allocated/stored.'
+
+    if(nspins==2) then
+       write(stdout,'(/,A)') ' Truncating Fourier components for charge density and spin density.'
+    else
+       write(stdout,'(/,A)') ' Truncating Fourier components for charge density.'
+    end if
+    write(stdout,100) ' Applying cutoff ', cutoff, cutoff*eV
+    ke_max = 0.0_dp
+    ndel = 0
+    do ng=1,ngvec
+       ! Calculate the kinetic energy associated with each G-vector
+       g_ke = sum(gvecs(ng,:)**2.0_dp)/2.0_dp
+       ! Note the current maximum cutoff we have.
+       ! When we do reach the actual maximum, this is the cutoff of the calculation.
+       if(g_ke>ke_max) ke_max = g_ke
+
+       if (g_ke>cutoff) then
+          ! If the G-vector has a radius (energy) outside the cutoff radius, set that Fourier component to zero
+          ndel = ndel + 1
+          charge_gs(ng) = cmplx_0
+          if (nspins==2) spin_gs(ng) = cmplx_0
+       end if
+    end do ! ng
+
+    ! Now check that the cutoff specified by the user is smaller than the calculation's cutoff,
+    ! otherwise, nothing happens...
+    write(stdout,100) ' Calculation cutoff ', ke_max, ke_max*eV
+    if (ke_max<=cutoff) then
+       write(stderr,'(A62,/,A13)') ' Your planewave cutoff is larger than that of the calculation!',' No effect...'
+    else
+       write(stdout,101) ndel, real(ndel,dp)/real(ngvec,dp)
+    end if
+100 format(A,T30,'= ',F10.2,' Hartrees= ',F14.2, ' eV')
+101 format(' Number of G-vectors removed: ',I6,/,T30,'= ',F8.4, ' of all G-vectors')
+
+    ! Write out truncated G-vectors to file
+    if (l_write_gs) then
+       write(stdout,'(A46,A,/)') ' Writing out truncated Fourier components to: ',trim(g_file)
+       call casino_plot_Gs(charge_gs,g_file)
+    end if
+  end subroutine casino_truncate_gs
 end module casino

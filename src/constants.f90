@@ -25,4 +25,5 @@ module constants
 
   real(kind=dp),parameter :: pi = acos(-1.0_dp)   ! Ratio of circumference of a circle to its diameter
   real(kind=dp),parameter :: bohr_radius=0.529177210903_dp ! Bohr radius in Angstroms
+  real(kind=dp),parameter :: eV=27.211386245_dp ! eV in 1 Hartree
 end module constants

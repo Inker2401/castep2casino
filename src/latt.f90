@@ -33,6 +33,12 @@ module latt
      logical                        :: shift_grid          ! Does user want to shift real space grid?
      real(kind=dp),allocatable      :: shift_frac(:)       ! the shift applied to the user's grid in fractional coordinates along x,y,z
      logical                        :: write_mathematica   ! write data to file as a Mathematica list
+
+     ! Truncating G-vectors 20/01/2024
+     logical                        :: no_write_untrun_g   ! Do NOT the untruncated components of the charge density to a file (Default: False)
+     logical                        :: trun_rho_g          ! Zero the Fourier components of the density after a certain planewave cutoff (Default : False)
+                                                           ! Set by specifying KE_CUTOFF in input file.
+     real(kind=dp)                  :: ke_cutoff           ! Planewave cutoff to use for truncation of Fourier components (in Hartrees)
   end type params
 
   type(params),public,save :: user_params   ! public instance of params type
@@ -148,7 +154,24 @@ contains
     ! Write real space density as Mathematica list - WRITE_MATHEMATICA
     user_params%write_mathematica=io_file_present(unit,'write_mathematica')
 
-    write(stdout,*) ''
+    ! Do not write untruncated G-vectors to a file - NO_WRITE_UNTRUN_G
+    user_params%no_write_untrun_g = io_file_present(unit,'no_write_untrun_g')
+
+    ! Zero Fourier components beyond a certain cutoff - KE_CUTOFF 20/01/2024
+    user_params%trun_rho_g = io_file_present(unit,'ke_cutoff')
+    if (user_params%trun_rho_g) then
+       allocate(tmpc(1))
+       tmpc= trim(io_file_code(unit,'ke_cutoff'))
+       read(tmpc,*,iostat=iostat) user_params%ke_cutoff
+       if(iostat/=0) error stop 'latt_read: Failed to read ke_cutoff'
+       deallocate(tmpc)
+
+       if (user_params%ke_cutoff<=0.0_dp) then
+          write(stderr,'(A29,F10.2,A28)') 'ERROR: Your planewave cutoff, ',user_params%ke_cutoff,' Hartrees, must be positive.'
+          stop
+       end if
+    end if
+
     ! Finished reading parameters
     close(unit,iostat=iostat)
     if(iostat/=0) error stop 'casino_read: Failed to close lattice geometry file.'

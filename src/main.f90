@@ -24,7 +24,7 @@ program castep2casino
   use io,       only : file_maxpath, stdout
   use latt,     only : latt_read,user_params
   use basis,    only : basis_initialise,basis_deallocate
-  use casino,   only : casino_read,casino_to_castep
+  use casino,   only : casino_read,casino_to_castep,casino_truncate_gs
   use density,  only : elec_density,density_allocate,density_deallocate,density_recip_to_real,density_write,&
                        density_shift, density_to_spin_ch
   use constants,only : dp
@@ -34,6 +34,8 @@ program castep2casino
   character(len=file_maxpath) :: casino_file, latt_file ! CASINO file, lattice geometry (user options) file
   type(elec_density)          :: recip_den,real_den     ! the density on a grid in reciprocal space, real space
   type(elec_density)          :: den_spin_ch ! rho^up and rho^down
+
+  real(dp)                    :: nelec, nup, ndown ! total number of electrons, number of up/down electrons
 
   ! Get arguments from the command line
   call get_input_files(casino_file,latt_file)
@@ -46,6 +48,11 @@ program castep2casino
 
   ! Read CASINO file
   call casino_read(trim(casino_file))
+
+  ! Zero G-vectors outside the user requested cutoff radius if requested
+  if (user_params%trun_rho_g) then
+     call casino_truncate_gs(user_params%ke_cutoff,write_gs=.true.)
+  end if
 
   ! Store CASINO density to CASTEP grid - still in reciprocal space
   call casino_to_castep(recip_den)
@@ -61,7 +68,8 @@ program castep2casino
   write(stdout,'(A30,/,A75)') ' Real Space Density Properties', repeat('-',75)
   call check_real_den(real_den)
 
-  write(stdout, '(A21,F12.5)') ' Number of electrons:', real_den%norm()
+  nelec = real_den%norm()
+  write(stdout, '(A21,F12.5)') ' Number of electrons:', nelec
   if (real_den%have_cmplx_den) then
      write(stdout,'(A18,3x,F18.10)') ' Maximum density: ',maxval(real(real_den%charge,dp))
      write(stdout,'(A18,3x,F18.10)') ' Minimum density: ',minval(real(real_den%charge,dp))
@@ -77,6 +85,13 @@ program castep2casino
   end if
   write(stdout,'(A75)') repeat('-',75)
 
+  ! Check for the negative number of electrons (noise from FFT) - 26/01/2024
+  if (real_den%have_cmplx_den) then
+     call check_negative_charge(real(real_den%charge,dp),nelec)
+  else
+     call check_negative_charge(real_den%real_charge,nelec)
+  end if
+
   ! Perform shift for visualisation purposes if requested.
   call density_shift(real_den)
 
@@ -91,10 +106,34 @@ program castep2casino
   end if
 
   if (real_den%nspins==2) then
-     write(stdout,'(A)') 'Writing rho^up and rho^down to rho_up_down.den_fmt'
+     ! Turn into rho^up and rho^down
      call density_to_spin_ch(real_den,den_spin_ch)
      call density_deallocate(real_den)
+
+     ! Remember that the rho^up and rho^down are stored in charge and spin arrays/densities respectively
+     ! so use the functions that evaluate their respespective integrals.
+     nup = den_spin_ch%norm() ; ndown = den_spin_ch%mag_moment(absval=.false.)
+     write(stdout,'(/,A32,/,A75)') ' Spin Channel Density Properties', repeat('-',75)
+     write(stdout,'(A,T30,2F12.5)') ' Number of up/down electrons: ', nup,ndown
+
+     ! Check for negative charge in each spin channel
+     if (real_den%have_cmplx_den) then
+        write(stdout,'(A)') ' Checking density for rho^up...'
+        call check_negative_charge(real(den_spin_ch%charge,dp),nup)
+        write(stdout,'(A)') ' Checking density for rho^down...'
+        call check_negative_charge(real(den_spin_ch%spin,dp),ndown)
+     else
+        write(stdout,'(A)') ' Checking density for rho^up...'
+        call check_negative_charge(den_spin_ch%real_charge,nup)
+        write(stdout,'(A)') ' Checking density for rho^down...'
+        call check_negative_charge(den_spin_ch%real_spin,ndown)
+     end if
+     write(stdout,'(A75)') repeat('-',75)
+
+     write(stdout,*) ''
+     write(stdout,'(A)') 'Writing rho^up and rho^down to rho_up_down.den_fmt'
      call density_write(den_spin_ch,'rho_up_down.den_fmt',fmt='R')
+
      call density_deallocate(den_spin_ch)
   end if
 
@@ -288,4 +327,77 @@ contains
     if(iostat/=0) error stop 'write_mathematica: Failed to close mathematica list file.'
   end subroutine write_mathematica
 
+  subroutine check_negative_charge(grid,n_expec)
+    !============================================================!
+    ! This routine checks how much the density where negative    !
+    ! integrates to while checking how much the positive density !
+    ! integrates to.                                             !
+    !                                                            !
+    ! Due to noise from the QMC calculation, the FFT can be      !
+    ! noisy resulting in the emergence of a negative charge      !
+    ! density. This can result in making the charge density      !
+    ! negative.                                                  !
+    !                                                            !
+    ! CASTEP will ignore a negative density and set it to zero   !
+    ! and the inversion will also be normalised to the number of !
+    ! electrons since the density is obtained from the square of !
+    ! the orbitals.                                              !
+    !                                                            !
+    ! The QMC density will also be "correctly" normalised since  !
+    ! the rho_G at G=0 determines the normalisation.             !
+    ! HOWEVER, the charge density where positive will be have    !
+    ! more than the actual number of electrons and this is       !
+    ! is compensated by the negative number of electrons.        !
+    ! This is UNPHYSICAL!                                        !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! grid(in) : real space density on a grid to check           !
+    ! n_expec(in)   : number of expected electrons               !
+    !------------------------------------------------------------!
+    ! Modules used                                               !
+    ! basis                                                      !
+    !------------------------------------------------------------!
+    ! Necessary conditions                                       !
+    ! The density must be in real space, i.e. the FFT must       !
+    ! be done first before this routine is called.               !
+    !                                                            !
+    ! Not strictly necessary but check_real_den should be called !
+    ! to check that the real space density is a real function.   !
+    ! This is mainly to verify that the FFT is actually correct. !
+    ! Due to various symmetries involved, the real space density !
+    ! SHOULD be real even if it has complex Fourier components.  !
+    !============================================================!
+    use basis, only : castep_basis
+
+    implicit none
+
+    real(dp), intent(in)           :: grid(:,:,:)   ! real space density to check
+    real(dp), intent(in)           :: n_expec       ! number of expected electrons in the calculation
+
+    ! flattened charge density array as 1D array
+    real(dp),allocatable           :: flat_charge(:)
+
+    logical                        :: have_negative_den
+    real(dp)                       :: n_neg
+
+
+    ! Flatten the charge density grid into a 1D array
+    flat_charge = pack(grid,.true.)
+
+    ! Check's if we have a negative charge density anywhere first.
+    have_negative_den = any(flat_charge<0.0_dp.eqv..true.)
+
+    ! If we're positive everywhere, we are "done"...
+    if (.not. have_negative_den) return
+
+    ! Otherwise get ready to rumble and batten down the hatches...
+    write(stdout,'(A50)') ' WARNING: FFT returned negative charge density!!!!'
+
+    n_neg = sum(flat_charge,flat_charge<0.0_dp)
+    ! Normalise to get electrons
+    n_neg = n_neg/castep_basis%total_grid_points
+
+    write(stdout,100) n_neg, abs(n_neg)/n_expec
+100 format(' Negative density integrates to= ',F18.10, ' electrons',/,T33,F18.10, ' of total electrons')
+  end subroutine check_negative_charge
 end program castep2casino
