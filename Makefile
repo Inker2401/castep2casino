@@ -74,7 +74,7 @@ EXECUTABLE = casino2castep.e
 COMPILE.F90 = $(F90) $(FFLAGS) $(MOD_FLAGS)
 
 # Specify targets
-.phony : all casino2castep clean
+.PHONY : all casino2castep clean
 
 all : casino2castep
 
