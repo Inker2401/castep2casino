@@ -13,9 +13,10 @@ module casino
   ! See below                                                                     !
   !-------------------------------------------------------------------------------!
   ! Public variables:                                                             !
-  ! ngvec - the number of G-vectors in the file                                   !
-  ! gvecs - the G-vectors of the non-zero Fourier components                      !
-  ! rho_gs - the Fourier components of the density in reciprocal space            !
+  ! ngvec     - the number of G-vectors in the file                               !
+  ! gvecs     - the G-vectors of the non-zero Fourier components                  !
+  ! charge_gs - the Fourier components of the charge density in reciprocal space  !
+  ! spin_gs   - the Fourier components of the spin density in reciprocal space    !
   !===============================================================================!
   use constants,only : dp
   use io,       only : stdout
