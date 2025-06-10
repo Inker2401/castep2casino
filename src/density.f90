@@ -49,6 +49,7 @@ module density
   !---------------------------------------------------------------------------!
   public :: density_allocate
   public :: density_deallocate
+  public :: density_copy
   public :: density_complex_to_real
   public :: density_real_to_complex
   public :: density_recip_to_real
@@ -171,6 +172,74 @@ contains
     ! Reset spins to 1
     den%nspins = 1
   end subroutine density_deallocate
+
+  subroutine density_copy(den1, den2, do_alloc,force_copy)
+    !============================================================!
+    ! Copies the density 1 into density 2                        !
+    ! This routine assumes that den2 is already allocated unless !
+    ! do_alloc is set to true.                                   !
+    ! Note when copying from complex to real density,            !
+    ! an error will be raised unless force_copy is set to true   !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! den1(in) :: input density                                  !
+    ! den2(inout) :: output density                              !
+    ! do_alloc :: allocate den2 with same allocation as den1     !
+    !             (default : False)                              !
+    ! force_copy:: force a copy of a complex density into real   !
+    !              density (default : False)                     !
+    !------------------------------------------------------------!
+    ! Modules used                                               !
+    ! None                                                       !
+    !------------------------------------------------------------!
+    ! Necessary Conditions                                       !
+    ! den1 contains a valid density                              !
+    ! den2 is allocated (if do_alloc is false)                   !
+    !============================================================!
+    implicit none
+    type(elec_density), intent(in)    :: den1    ! input density
+    type(elec_density), intent(inout) :: den2    ! output density
+    logical, optional,  intent(in) :: do_alloc   ! Do allocation of den2 (Default : False)
+    logical, optional,  intent(in) :: force_copy ! Do allocation of den2 (Default : False)
+
+
+    logical :: l_alloc, l_force
+
+    l_alloc = .false. ; l_force = .false.
+    if (present(do_alloc)) l_alloc=do_alloc
+    if (present(force_copy)) l_force=force_copy
+
+    ! Check if we need to allocate the density
+    if (l_alloc) then
+       call density_allocate(den2, den1%nspins, den1%have_cmplx_den)
+    end if
+    if (den1%nspins/=den2%nspins) error stop 'density_copy: Densities do not have the same number of spins'
+
+    ! Now copy density over
+    if (den1%have_cmplx_den) then
+       if (den2%have_cmplx_den) then
+          den2%charge = den1%charge
+          if(den1%nspins==2) den2%spin = den1%spin
+       else
+          if (l_force) then
+             den2%real_charge = real(den1%charge, dp)
+             if(den1%nspins==2) den2%real_spin = real(den1%spin, dp)
+          else
+             error stop 'density_copy: den1 is complex but den2 is real'
+          end if
+       end if
+
+    else ! den1 is real
+
+       if (den2%have_cmplx_den) then
+          den2%charge = cmplx(den1%real_charge, 0.0_dp, dp)
+          if(den1%nspins==2) den2%spin = cmplx(den1%real_spin, 0.0_dp, dp)
+       else
+          den2%real_charge = den1%real_charge
+          if(den1%nspins==2) den2%real_spin = den1%real_spin
+       end if
+    end if
+  end subroutine density_copy
 
   subroutine density_complex_to_real(den)
     !============================================================!

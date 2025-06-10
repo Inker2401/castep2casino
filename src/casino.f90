@@ -43,6 +43,7 @@ module casino
   public :: casino_to_castep
   public :: casino_check_symmetry
   public :: casino_truncate_gs
+  public :: casino_finalise
 
 contains
 
@@ -274,6 +275,7 @@ contains
     integer,allocatable :: gvec_int(:,:) ! G-vecs as multiples of recip. latt. vectors
     integer :: min_x,min_y,min_z         ! minimum grid size required
     logical :: grid_ok                   ! is the CASTEP grid large enough
+    integer :: stat
 
     ! Turn the G-vectors into integer multiples of primitive lattice vectors
     call casino_G_to_int(gvec_int)
@@ -311,6 +313,9 @@ contains
     ! Now we store the non-zero reciprocal space density components onto a grid
     call casino_read_recip_grid(den,gvec_int)
 
+    ! 15/07/2024 - we are finished with the integer G-vectors so we can deallocate them now
+    deallocate(gvec_int, stat=stat)
+    if (stat/=0) error stop 'casino_to_castep: Failed to deallocate gvec_int'
   end subroutine casino_to_castep
 
   subroutine casino_G_to_int(gvec_int)
@@ -525,8 +530,8 @@ contains
       !============================================================!
       use math, only : math_isclose
       implicit none
-      complex(kind=dp),allocatable :: den_grid(:,:,:) ! density stored on grid with symmetric bounds
-      integer :: nx,ny,nz
+      complex(kind=dp),allocatable, intent(in) :: den_grid(:,:,:) ! density stored on grid with symmetric bounds
+      integer, intent(in) :: nx,ny,nz
 
       integer :: ix,iy,iz
 
@@ -690,4 +695,35 @@ contains
        call casino_plot_Gs(charge_gs,g_file)
     end if
   end subroutine casino_truncate_gs
+
+  subroutine casino_finalise
+    !============================================================!
+    ! This routine frees up memory from the charge and spin      !
+    ! Fourier components, i.e. charge_gs and spin_gs             !
+    ! as well as their associated G-vectors                      !
+    ! This routine should be called once all necessary           !
+    ! operations are done                                        !
+    !------------------------------------------------------------!
+    ! Necessary conditions                                       !
+    ! None                                                       !
+    !------------------------------------------------------------!
+    ! Version 1.0, 15/07/2024                                    !
+    !============================================================!
+
+    implicit none
+    integer :: stat
+
+    if (allocated(gvecs)) then
+       deallocate(gvecs, stat=stat)
+       if (stat/=0) error stop 'casino_finalise: Failed to deallocate G-vectors'
+    end if
+    if (allocated(charge_gs)) then
+       deallocate(charge_gs, stat=stat)
+       if (stat/=0) error stop 'casino_finalise: Failed to deallocate charge density Fourier components'
+    end if
+    if (allocated(spin_gs)) then
+       deallocate(spin_gs, stat=stat)
+       if (stat/=0) error stop 'casino_finalise: Failed to deallocate spin density Fourier components'
+    end if
+  end subroutine casino_finalise
 end module casino

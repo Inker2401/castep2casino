@@ -89,6 +89,9 @@ contains
     call dfftw_plan_dft_3d(castep_basis%plan_for,ngx,ngy,ngz,grid,grid,FFTW_FORWARD,FFTW_ESTIMATE)
     call dfftw_plan_dft_3d(castep_basis%plan_back,ngx,ngy,ngz,grid,grid,FFTW_BACKWARD,FFTW_ESTIMATE)
 
+    ! 17/05/2024 - added deallocate call
+    deallocate(grid,stat=stat)
+    if(stat/=0) error stop 'basis_initialise: Failed to deallocate grid.'
   end subroutine basis_initialise
 
   subroutine basis_deallocate()

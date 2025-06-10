@@ -24,7 +24,7 @@ program castep2casino
   use io,       only : file_maxpath, stdout
   use latt,     only : latt_read,user_params
   use basis,    only : basis_initialise,basis_deallocate
-  use casino,   only : casino_read,casino_to_castep,casino_truncate_gs
+  use casino,   only : casino_read,casino_to_castep,casino_truncate_gs,casino_finalise
   use density,  only : elec_density,density_allocate,density_deallocate,density_recip_to_real,density_write,&
                        density_shift, density_to_spin_ch
   use constants,only : dp
@@ -56,6 +56,10 @@ program castep2casino
 
   ! Store CASINO density to CASTEP grid - still in reciprocal space
   call casino_to_castep(recip_den)
+
+  ! We no longer need the actual G-vectors, charge and spin density 15/07/2024
+  ! Fourier components so we can free the memory they use now.      15/07/2024
+  call casino_finalise()
 
   ! Perform FFT from reciprocal space to real space
   ! TODO - if we know it is going to be real, e.g. inversion symmetry, should allocate real instead
