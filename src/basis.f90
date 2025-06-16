@@ -49,6 +49,9 @@ module basis
   !---------------------------------------------------------------------------!
   !                     P r i v a t e   V a r i a b l e s                     !
   !---------------------------------------------------------------------------!
+  ! The definition of these variables follows their definition in FFT.
+  ! NB: CASTEP is setup such that the actual transform
+  ! from real to reciprocal space uses the 'backward' plan.
   integer,parameter :: FFTW_FORWARD=-1
   integer,parameter :: FFTW_BACKWARD=1
   integer,parameter :: FFTW_ESTIMATE=0
@@ -132,7 +135,7 @@ contains
     implicit  none
     complex(kind=dp),intent(inout) :: grid(:,:,:)
 
-    call dfftw_execute_dft(castep_basis%plan_for,grid,grid)
+    call dfftw_execute_dft(castep_basis%plan_back,grid,grid)
 
     ! Normalise reciprocal space grid
     grid = grid/castep_basis%total_grid_points
@@ -152,7 +155,7 @@ contains
     implicit  none
     complex(kind=dp),intent(inout) :: grid(:,:,:)
 
-    call dfftw_execute_dft(castep_basis%plan_back,grid,grid)
+    call dfftw_execute_dft(castep_basis%plan_for,grid,grid)
   end subroutine basis_recip_to_real
 
   subroutine basis_shift_cmplx(grid)
