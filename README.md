@@ -83,7 +83,9 @@ For example, if you have a file named `QMC.dat` as the lattice geometry file, th
 ### Truncation of Charge Density
 If you want to truncate the high coefficient Gs beyond a certain cutoff, you can do this using the keyword
 using the keyword `ke_cutoff` which will take a value _in Hartrees_ which corresponds to
+
 $$E_\mathrm{cut} = \frac{1}{2}|\mathbf{G}_\textrm{max}|^2$$
+
 Any Fourier components $\rho_\mathbf{G}$ at a $|\mathbf{G}|\geq|\mathbf{G}_\textrm{max}|$ will be set to zero.
 
 A plot of the Fourier components will be produced which you can disable using the keyword `no_write_untrun_g`.
@@ -95,7 +97,7 @@ A possible metric used in the program is to find out how much the _negative_ par
 This program can also sanity check your CASINO expectation value files from VMC/DMC calculations.
 This can be done by adding the `CHECK_EXPVAL` keyword in the `.latt` file. Doing so does the following:
 1. Checks normalisation in reciprocal space (based on zero G-component)
-2. Checks for complex conjugate symmetry rho_G = rho_-G*  (this is REQUIRED since the charge density is real)
+2. Checks for complex conjugate symmetry $\rho_\mathbf{G} = \rho_\mathbf{-G}^*$  (this is REQUIRED since the charge density is real)
 3. Checks for inversion symmetry (this is of course only required if it is there to begin with!)
 
 **IMPORTANT**: In this instance, the primitive lattice vectors will be read from the expval file so you do not need to nor should you specify them in .latt file.
