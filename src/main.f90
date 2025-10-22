@@ -16,8 +16,6 @@ program castep2casino
   !                                                                                 !
   ! 5. Perform the FFT to get the density to real space before writing to CASTEP    !
   !---------------------------------------------------------------------------------!
-  ! Important variables                                                             !
-  !---------------------------------------------------------------------------------!
   ! Written by : Visagan Ravindran, Stewart Clark                                   !
   !              Department of Physics, University of Durham                        !
   !---------------------------------------------------------------------------------!
@@ -195,16 +193,21 @@ contains
     write(stdout,'(A60)') ' -h, --help   : print this help message                     '
     write(stdout,'(A60)') repeat(' ',60)
     write(stdout,'(A60)') repeat(' ',60)
-    write(stdout,'(A60)') 'Lat Geom File keywords:                                     '
-    write(stdout,'(A60)') ' castep_grid    : specify number of grid points for CASTEP  '
+    write(stdout,'(A60)') 'Lat Geom (.latt) File keywords:                             '
+    write(stdout,'(A60)') ' output_file    : name of output file to use                '
+    write(stdout,'(A60)') '                  default: seedname of <casino_file>.den_fmt'
+    write(stdout,'(A60)') ' check_expval   : check expectation value (expval.data) file'
+    write(stdout,'(A60)') '                  from a VMC/DMC run                        '
+    write(stdout,'(A60)') '                                                            '
     write(stdout,'(A60)') ' prim_latt_cart : primitive lattice vectors                 '
     write(stdout,'(A60)') '                  specified as block (see README.md)        '
     write(stdout,'(A60)') ' unit_bohr      : specify lattice vectors in Bohr,          '
     write(stdout,'(A60)') '                  otherwise will use angstroms instead.     '
-    write(stdout,'(A60)') ' output_file    : name of output file to use                '
-    write(stdout,'(A60)') '               Default - seedname from <casino_file>.den_fmt'
+    write(stdout,'(A60)') ' castep_grid    : specify number of grid points for CASTEP  '
     write(stdout,'(A60)') ' shift_grid     : shift the real space density by an amount '
     write(stdout,'(A60)') '                 in fractional coordinates.                 '
+    write(stdout,'(A60)') '                                                            '
+    write(stdout,'(A60)') ' check_expval   : read data from an expval.data file        '
     stop
   end subroutine print_help
 

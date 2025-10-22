@@ -91,6 +91,14 @@ The reason for doing is mainly to deal with Fourier aliasing from a noisy charge
 A possible metric used in the program is to find out how much the _negative_ part of the charge density integrates to
 (obviously a physical charge density is positive $\rho(\mathbf{r}) \geq 0$!)
 
+### Checking expectation values
+This program can also sanity check your CASINO expectation value files from VMC/DMC calculations.
+This can be done by adding the `CHECK_EXPVAL` keyword in the `.latt` file. Doing so does the following:
+1. Checks normalisation in reciprocal space (based on zero G-component)
+2. Checks for complex conjugate symmetry rho_G = rho_-G*  (this is REQUIRED since the charge density is real)
+3. Checks for inversion symmetry (this is of course only required if it is there to begin with!)
+
+**IMPORTANT**: In this instance, the primitive lattice vectors will be read from the expval file so you do not need to nor should you specify them in .latt file.
 
 ## Licence
 Copyright (C) 2023 V Ravindran

@@ -47,26 +47,16 @@ module casino
   public :: casino_finalise
 
 contains
-
   subroutine casino_read(filename)
     !============================================================!
-    ! Reads the CASINO file and obtains the number of G-vectors  !
-    ! the G-vectors themselves and the Fourier components of the !
-    ! density.                                                   !
-    ! This routine should be called before calling any other     !
-    ! routines in this module.                                   !
+    ! Wrapper routine for reading different density files from   !
+    ! CASINO                                                     !
     !------------------------------------------------------------!
     ! Arguments                                                  !
     ! filename(in) : the name of the CASINO file                 !
     !------------------------------------------------------------!
     ! Modules used                                               !
-    ! IO                                                         !
-    !------------------------------------------------------------!
-    ! Key internal variables                                     !
-    ! rho_gs : - Fourier component for the density of each spin  !
-    !            channel, i.e rho^up and rho^down                !
-    !            These are normalised to the number of electrons !
-    !            for each spin                                   !
+    ! latt                                                       !
     !------------------------------------------------------------!
     ! Parent variables used                                      !
     ! ngvec: number of G-vectors                                 !
@@ -78,95 +68,26 @@ contains
     ! Necessary Conditions                                       !
     ! filename must point to a FORMATTED file                    !
     !============================================================!
-    use io,only : io_skip_header
     use latt, only : user_params
 
     implicit none
 
-    character(len=*),intent(in) :: filename ! CASINO file name
+    character(len=*),intent(in) :: filename ! CASINO density file
 
-    ! File headers to skip past in CASINO file
-    character(len=20),parameter :: ngvec_header='Number of G vectors:'
-    character(len=25),parameter :: gvec_header='G vectors (Hartree a.u.):'
-    character(len=27),parameter :: nspins_header='Number of charge densities:'
-    character(len=38),parameter :: rho_g_header_up='Fourier coefficients of density set 1:'
-    character(len=38),parameter :: rho_g_header_down='Fourier coefficients of density set 2:'
-
+    complex(kind=dp), allocatable :: rho_gs(:,:) ! Fourier components of the density for each
+                                                 ! spin channel, i.e. rho^up rho^down
     ! For writing G-vectors to a file
     character(len=15),parameter :: untrun_gfile='untrun_rhoG.txt'
-    integer :: unit,iostat,stat
-    integer :: i
-    character(len=60) :: iomsg
 
-    complex(kind=dp),allocatable :: rho_gs(:,:)   ! Fourier components of the density for each spin channel, spin,
-                                                  ! i.e. rho^up rho^down
+    integer :: stat
 
-    ! Open the file
-    open(file=trim(filename),newunit=unit,status='OLD',action='READ',&
-         iostat=iostat,iomsg=iomsg)
-    if(iostat/=0) then
-       write(*,'(A7,A)') 'ERROR: ',trim(iomsg)
-       stop 'Could not open CASINO file'
+    if (user_params%check_expval) then
+       call casino_read_expval(filename, rho_gs)
+    else
+       call casino_read_extrapolated(filename, rho_gs)
     end if
 
-    ! Obtain the number of G-vectors
-    call io_skip_header(unit,ngvec_header,case_sensitive=.true.) ! Make case sensitive just in case file format changes...
-    read(unit,*,iostat=iostat) ngvec
-    if(iostat/=0) error stop 'casino_read: Failed to read number of G-vectors'
-    write(stdout,'(A22,I7)') ' Number of G-vectors: ', ngvec
-
-    ! Obtain the G-vectors
-    allocate(gvecs(ngvec,3),stat=stat)
-    if(stat/=0) error stop 'casino_read: Failed to allocate G-vectors array.'
-    call io_skip_header(unit,gvec_header,case_sensitive=.true.)
-    do i=1,ngvec
-       read(unit,*,iostat=iostat) gvecs(i,:)
-       if(iostat/=0) error stop 'casino_read: Failed to read G-vectors'
-    end do
-    ! DEBUG G-vector read
-    ! write(*,*) 'G-vectors'
-    ! write(*,*) gvecs(1,:)
-    ! write(*,*) gvecs(2,:)
-    ! write(*,*) gvecs(ngvec-1,:)
-    ! write(*,*) gvecs(ngvec,:)
-
-    ! Obtain the number of spins 05/12/2023
-    call io_skip_header(unit,nspins_header,case_sensitive=.true.)
-    read(unit,*,iostat=iostat) nspins
-    if(iostat/=0) error stop 'casino_read: Failed to read number of spins.'
-    select case(nspins)
-    case(1,2)
-       write(stdout,'(A28,I1)') ' Number of spin components: ', nspins
-    case default
-       stop 'casino_read: Error in CASINO file. Should have only 1 or 2 spin components!'
-    end select
-
-    ! Obtain the Fourier components...
-    allocate(rho_gs(ngvec,nspins),stat=stat)
-    if(stat/=0) error stop 'casino_read: Failed to allocate Fourier components array.'
-    call io_skip_header(unit,rho_g_header_up,case_sensitive=.true.)
-    do i=1,ngvec
-       read(unit,*,iostat=iostat) rho_gs(i,1)
-       if(iostat/=0) error stop 'casino_read: Failed to read Fourier components'
-    end do
-
-    ! ... remembering to do the second spin if we have it
-    if (nspins==2) then
-       call io_skip_header(unit,rho_g_header_down,case_sensitive=.true.)
-       do i=1,ngvec
-          read(unit,*,iostat=iostat) rho_gs(i,2)
-          if(iostat/=0) error stop 'casino_read: Failed to read Fourier components for second spin component'
-       end do
-    end if
-
-    ! DEBUG Fourier componets
-    ! write(*,*) 'Fourier components'
-    ! write(*,*) rho_gs(1,1)
-    ! write(*,*) rho_gs(2,1)
-    ! write(*,*) rho_gs(ngvec-2,1)
-    ! write(*,*) rho_gs(ngvec-1,1)
-    ! write(*,*) rho_gs(ngvec,1)
-
+    ! Moved here from casino_read_expval  EXPVAL_REFACTOR 10/06/2025
     ! Now turn the densities into total charge densities and spin densities
     ! NOTE that the density for each spin channel is normalised to the number of electrons for that channel
     allocate(charge_gs(ngvec),stat=stat)
@@ -189,11 +110,312 @@ contains
        write(stdout,'(A56,A,/)') ' Writing out planewave energy of Fourier components to: ',trim(untrun_gfile)
        call casino_plot_Gs(charge_gs,untrun_gfile)
     end if
+    ! END EXPVAL_REFACTOR
+  end subroutine casino_read
+
+  subroutine casino_read_extrapolated(filename,rho_gs)
+    !============================================================!
+    ! Reads the CASINO file and obtains the number of G-vectors  !
+    ! the G-vectors themselves and the Fourier components of the !
+    ! density.                                                   !
+    ! This routine should be called before calling any other     !
+    ! routines in this module.                                   !
+    !                                                            !
+    ! This is the file format for an extrapolated density, i.e.  !
+    ! from multiple VMC/DMC runs.                                !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! filename(in) : the name of the CASINO file                 !
+    !------------------------------------------------------------!
+    ! Modules used                                               !
+    ! IO                                                         !
+    !------------------------------------------------------------!
+    ! Key internal variables                                     !
+    ! rho_gs : - Fourier component for the density of each spin  !
+    !            channel, i.e rho^up and rho^down                !
+    !            These are normalised to the number of electrons !
+    !            for each spin                                   !
+    !------------------------------------------------------------!
+    ! Parent variables used                                      !
+    ! ngvec: number of G-vectors                                 !
+    ! nspins: number of spin channels                            !
+    !------------------------------------------------------------!
+    ! Necessary Conditions                                       !
+    ! filename must point to a FORMATTED file                    !
+    !============================================================!
+    use io,only : io_skip_header
+
+    implicit none
+
+    character(len=*), intent(in)               :: filename    ! CASINO file name
+    complex(kind=dp), intent(out), allocatable :: rho_gs(:,:) ! Fourier components of the density for each
+                                                              ! spin channel, i.e. rho^up rho^down
+
+    ! File headers to skip past in CASINO file
+    character(len=20),parameter :: ngvec_header='Number of G vectors:'
+    character(len=25),parameter :: gvec_header='G vectors (Hartree a.u.):'
+    character(len=27),parameter :: nspins_header='Number of charge densities:'
+    character(len=38),parameter :: rho_g_header_up='Fourier coefficients of density set 1:'
+    character(len=38),parameter :: rho_g_header_down='Fourier coefficients of density set 2:'
+
+    integer :: unit,iostat,stat
+    integer :: i
+    character(len=60) :: iomsg
+
+    ! Open the file
+    open(file=trim(filename),newunit=unit,status='OLD',action='READ',&
+         iostat=iostat,iomsg=iomsg)
+    if(iostat/=0) then
+       write(*,'(A7,A)') 'ERROR: ',trim(iomsg)
+       stop 'Could not open CASINO file'
+    end if
+
+    ! Obtain the number of G-vectors
+    call io_skip_header(unit,ngvec_header,case_sensitive=.true.) ! Make case sensitive just in case file format changes...
+    read(unit,*,iostat=iostat) ngvec
+    if(iostat/=0) error stop 'casino_read_extrapolated: Failed to read number of G-vectors'
+    write(stdout,'(A22,I7)') ' Number of G-vectors: ', ngvec
+
+    ! Obtain the G-vectors
+    allocate(gvecs(ngvec,3),stat=stat)
+    if(stat/=0) error stop 'casino_read_extrapolated: Failed to allocate G-vectors array.'
+    call io_skip_header(unit,gvec_header,case_sensitive=.true.)
+    do i=1,ngvec
+       read(unit,*,iostat=iostat) gvecs(i,:)
+       if(iostat/=0) error stop 'casino_read_extrapolated: Failed to read G-vectors'
+    end do
+    ! DEBUG G-vector read
+    ! write(*,*) 'G-vectors'
+    ! write(*,*) gvecs(1,:)
+    ! write(*,*) gvecs(2,:)
+    ! write(*,*) gvecs(ngvec-1,:)
+    ! write(*,*) gvecs(ngvec,:)
+
+    ! Obtain the number of spins 05/12/2023
+    call io_skip_header(unit,nspins_header,case_sensitive=.true.)
+    read(unit,*,iostat=iostat) nspins
+    if(iostat/=0) error stop 'casino_read_extrapolated: Failed to read number of spins.'
+    select case(nspins)
+    case(1,2)
+       write(stdout,'(A28,I1)') ' Number of spin components: ', nspins
+    case default
+       stop 'casino_read_extrapolated: Error in CASINO file. Should have only 1 or 2 spin components!'
+    end select
+
+    ! Obtain the Fourier components...
+    allocate(rho_gs(ngvec,nspins),stat=stat)
+    if(stat/=0) error stop 'casino_read_extrapolated: Failed to allocate Fourier components array.'
+    call io_skip_header(unit,rho_g_header_up,case_sensitive=.true.)
+    do i=1,ngvec
+       read(unit,*,iostat=iostat) rho_gs(i,1)
+       if(iostat/=0) error stop 'casino_read_extrapolated: Failed to read Fourier components'
+    end do
+
+    ! ... remembering to do the second spin if we have it
+    if (nspins==2) then
+       call io_skip_header(unit,rho_g_header_down,case_sensitive=.true.)
+       do i=1,ngvec
+          read(unit,*,iostat=iostat) rho_gs(i,2)
+          if(iostat/=0) error stop 'casino_read_extrapolated: Failed to read Fourier components for second spin component'
+       end do
+    end if
+
+    ! DEBUG Fourier componets
+    ! write(*,*) 'Fourier components'
+    ! write(*,*) rho_gs(1,1)
+    ! write(*,*) rho_gs(2,1)
+    ! write(*,*) rho_gs(ngvec-2,1)
+    ! write(*,*) rho_gs(ngvec-1,1)
+    ! write(*,*) rho_gs(ngvec,1)
 
     close(unit,iostat=iostat,status='KEEP')
     if(iostat/=0) error stop 'casino_read: Failed to close CASINO file.'
 
-  end subroutine casino_read
+  end subroutine casino_read_extrapolated
+
+  subroutine casino_read_expval(filename,rho_gs)
+    !============================================================!
+    ! Reads the CASINO expval.dat file and then performs sanity  !
+    ! checks on the density in real and reciprocal space         !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! filename(in) : the name of the CASINO file                 !
+    !------------------------------------------------------------!
+    ! Modules used                                               !
+    ! IO, latt                                                   !
+    !------------------------------------------------------------!
+    ! Parent module variables used                               !
+    ! ngvec : number of G-vectors in file                        !
+    ! nspins: number of spin channels                            !
+    !------------------------------------------------------------!
+    ! Necessary Conditions                                       !
+    ! filename must point to a FORMATTED file                    !
+    !============================================================!
+    use io,   only : file_maxpath, io_skip_header
+    use latt, only : user_params, latt_write_platt, latt_calc_const_and_angles
+
+    implicit none
+
+    character(len=*), intent(in) :: filename
+    complex(kind=dp), intent(out), allocatable :: rho_gs(:,:) ! Fourier components of the density for each
+                                                              ! spin channel, i.e. rho^up rho^down
+
+    integer                      :: expval_unit
+
+    ! Calculation parameters headers
+    character(len=file_maxpath),parameter     :: calc_header='Accumulation carried out using'
+    character(len=file_maxpath),parameter     :: npart_header='Number of each type of particle'
+    character(len=file_maxpath),parameter     :: supercell_header='Supercell matrix (11),(22),(33),(12),(13),(21),(23),(31),(32)'
+    character(len=file_maxpath),parameter     :: platt_header='Primitive translation vectors (au)'
+
+    ! Reciprocal density headers
+    character(len=file_maxpath),parameter     :: gvec_header='G-vector components Gx, Gy, Gz (au)'
+    character(len=file_maxpath),parameter     :: ngvec_header='Number of G-vectors in set'
+    character(len=20)                         :: start_set, end_set
+
+    character(len=5)                          :: calc_type                  ! Density from VMC/DMC?
+    integer                                   :: super_x, super_y, super_z  ! Number of primitive cells along x, y and z
+    integer                                   :: nup,ndown,ntotal,nprim     ! Number of up,down,total electrons,primitive cell electrons
+
+    real(kind=dp)                             :: x, y
+    integer                                   :: i,ns
+    character(len=100)                        :: iomsg
+    integer                                   :: iostat, stat
+
+    character(len=120)                        :: line
+
+    ! Get the run type
+    open(file=trim(filename),newunit=expval_unit,status='OLD',action='READ',&
+         iostat=iostat,iomsg=iomsg)
+    if(iostat/=0) write(stdout,*) trim(iomsg)
+
+    ! Determine calculation type
+    call io_skip_header(expval_unit,calc_header)
+    read(expval_unit,*,iostat=iostat) calc_type
+    if(iostat/=0) stop 'Could not get calculation type from file.'
+
+    ! Get number of primitive cells
+    call io_skip_header(expval_unit,supercell_header)
+    read(expval_unit,*,iostat=iostat) super_x,super_y,super_z
+    if(iostat/=0) stop 'Could not get supercell dimensions from file.'
+
+    ! Get the number of electrons in simulation cell
+    call io_skip_header(expval_unit,npart_header)
+    read(expval_unit,*,iostat=iostat) nup, ndown
+    ntotal = nup+ndown
+    if(iostat/=0) stop 'Could not get number of electrons from file.'
+
+    ! Get number of electrons in primitive cell
+    nprim = ntotal / (super_x*super_y*super_z)
+
+    ! Read primitive lattice vectors
+    call io_skip_header(expval_unit,platt_header)
+    do i=1,3
+       read(expval_unit,*,iostat=iostat) user_params%platt(i,:)
+       if(iostat/=0) error stop 'casino_read_expval: Failed to read primitive lattice vectors'
+    end do
+    call latt_write_platt()
+    call latt_calc_const_and_angles()
+
+    ! Get the number of G-vectors
+    call io_skip_header(expval_unit,ngvec_header)
+    read(expval_unit,*,iostat=iostat) ngvec
+    if(iostat/=0) stop 'Could not get number of G-vectors from file.'
+
+    ! Now read the G-vectors
+    call io_skip_header(expval_unit,gvec_header)
+    allocate(gvecs(ngvec,3), stat=stat)
+    if(stat/=0) error stop 'casino_read_expval: Could not allocate G-vectors'
+    do i=1,ngvec
+       read(expval_unit,*,iostat=iostat) gvecs(i,:)
+       if(iostat/=0) stop 'Failed to read G-vectors'
+    end do
+    ! DEBUG G-VECTOR READ
+    ! write(stdout,*) 'G-vectors'
+    ! write(stdout,*) gvecs(1,:)
+    ! write(stdout,*) gvecs(ngvec,:)
+    ! END DEBUG G-VECTOR READ
+
+    ! Decide whether we have a charge or spin density
+    read(expval_unit,'(A)') line ! END GVECTOR SET 1
+    read(expval_unit,'(A)') line ! blank line
+    read(expval_unit,'(A)') line ! Actual header for start of Fourier components
+    if (index(line,'START SPIN DENSITY')>0) then
+       nspins=2
+    else if (index(line,'START DENSITY')>0) then
+       nspins=1
+    else
+       ! This shouldn't be needed but let's be safe in case file format has changed or something.
+       stop 'casino_read_expval: Unknown type of expectation value encountered. Not implemented'
+    end if
+
+    ! Write info about the expecation value
+    write(stdout,'(A40)') '            Expecation Value Information'
+    write(stdout,'(A20,T50,A)') ' Calculation using: ', trim(calc_type)
+    if (nspins==2) then
+       write(stdout,'(A20,T50,A)') ' Expectation value: ', 'spin-polarised density'
+    else
+       write(stdout,'(A20,T50,A)') ' Expectation value: ', 'density'
+    end if
+    write(stdout,'(A34,T50,3I2)') ' Supercell dimensions (a,b,c)-axis', super_x,super_y,super_z
+    write(stdout,'(A28,T50,I5)') ' Number of primitive cells: ', super_x*super_y*super_z
+    write(stdout,'(A38,T50,I5)') ' No. of electrons in simulation cell: ', ntotal
+    write(stdout, '(A37,T50,I5)') ' No. of electrons in primitive cell: ', nprim
+
+    write(stdout,'(/,A20,T50,I6,/)') ' Number of G-vectors', ngvec
+
+    ! Read the Fourier components
+    allocate(rho_gs(ngvec,nspins), stat=stat)
+    if(stat/=0) error stop 'casino_read_expval: Could not allocate Fourier components of density.'
+
+    ! Skip header to start of set
+    do i=1, 6
+       read(expval_unit,'(A)') line
+    end do
+
+    do ns=1, nspins
+       write(start_set,'(A9,1x,I1)') 'START SET', ns
+       write(end_set,'(A7,1x,I1)') 'END SET', ns
+
+       read(expval_unit,'(A)') line
+       if (index(line, start_set) <= 0) then
+          if(stat/=0) stop 'casino_read_expval: Expected start of set but could not find it.'
+       end if
+       ! Skip additional header within SET block
+       do i=1, 4
+          read(expval_unit,'(A)') line
+       end do
+
+       ! Finally read the Fourier components
+       read(expval_unit,'(A)') line
+       if (index(line, 'complex') <= 0) then
+          if(stat/=0) stop 'casino_read_expval: Real-valued expectation values are not implemented.'
+       end if
+       do i=1,ngvec
+          read(expval_unit,*,iostat=iostat) x,y
+          rho_gs(i,ns) = cmplx(x,y,dp)
+          if(iostat/=0) stop 'casino_read_expval: Failed to read Fourier components.'
+       end do
+
+       read(expval_unit,'(A)') line
+       if (index(line, end_set) <= 0) then
+          if(iostat/=0) stop 'casino_read_expval: Expected end of set block but could not find it.'
+       end if
+    end do
+
+
+    ! DEBUG RHO_G READ
+    ! do ns=1, nspins
+    !    write(stdout,*) 'Fourier components of density, spin=', ns
+    !    write(stdout,*) rho_gs(1,ns)
+    !    write(stdout,*) rho_gs(ngvec,ns)
+    ! end do
+    ! END DEBUG RHO_G READ
+
+    close(expval_unit,iostat=iostat,status='KEEP')
+    if(iostat/=0) error stop 'casino_read_expval: Failed to close CASINO file.'
+
+  end subroutine casino_read_expval
 
   subroutine casino_plot_Gs(den_gs,g_filename)
     !============================================================!
@@ -217,6 +439,7 @@ contains
     ! Necessary conditions                                       !
     ! casino_read should be called before calling this routine   !
     !============================================================!
+
     implicit none
 
     ! Arguments

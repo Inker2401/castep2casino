@@ -185,9 +185,14 @@ contains
     !      castep_basis%ngz*user_params%shift_frac(3)
     ! write(*,*) xshift,yshift,zshift
 
-    grid = cshift(grid,xshift,1)
-    grid = cshift(grid,yshift,2)
-    grid = cshift(grid,zshift,3)
+    ! Added minus sign to shifts 11/06/2025
+    ! It's arguably more natural to expect that a positive shift applies a positive shift  11/06/2025
+    ! in the unit cell coordinate-wise. However, there is a quirk regarding cshift:        11/06/2025
+    ! cshift([1,2,3],1) = [2,1,3] but what the user probably expected is                   11/06/2025
+    ! cshift([1,2,3],-1) = [3,1,2].                                                        11/06/2025
+    grid = cshift(grid,-xshift,1)
+    grid = cshift(grid,-yshift,2)
+    grid = cshift(grid,-zshift,3)
   end subroutine basis_shift_cmplx
 
   subroutine basis_shift_real(grid)
@@ -217,8 +222,13 @@ contains
     !      castep_basis%ngz*user_params%shift_frac(3)
     ! write(*,*) xshift,yshift,zshift
 
-    grid = cshift(grid,xshift,1)
-    grid = cshift(grid,yshift,2)
-    grid = cshift(grid,zshift,3)
+    ! Added minus sign to shifts 11/06/2025
+    ! It's arguably more natural to expect that a positive shift applies a positive shift  11/06/2025
+    ! in the unit cell coordinate-wise. However, there is a quirk regarding cshift:        11/06/2025
+    ! cshift([1,2,3],1) = [2,1,3] but what the user probably expected is                   11/06/2025
+    ! cshift([1,2,3],-1) = [3,1,2].                                                        11/06/2025
+    grid = cshift(grid,-xshift,1)
+    grid = cshift(grid,-yshift,2)
+    grid = cshift(grid,-zshift,3)
   end subroutine basis_shift_real
 end module basis

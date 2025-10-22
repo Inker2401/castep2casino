@@ -25,9 +25,12 @@ module latt
   !                       P u b l i c   V a r i a b l e s                     !
   !---------------------------------------------------------------------------!
   type params
+     ! Primitive Cell properties
      real(kind=dp),dimension(3,3)   :: platt               ! lattice vector, component
      real(kind=dp),dimension(3)     :: lat_consts          ! lattice constants (in Bohr) a,b,c
      real(kind=dp),dimension(3)     :: lat_angles          ! lattice angles (in degrees) alpha,beta,gamma
+
+     ! Real Space Density
      character(len=file_maxpath)    :: den_fmt_file        ! name of formatted density file
      integer                        :: ngx,ngy,ngz         ! CASTEP grid size
      logical                        :: shift_grid          ! Does user want to shift real space grid?
@@ -39,14 +42,20 @@ module latt
      logical                        :: trun_rho_g          ! Zero the Fourier components of the density after a certain planewave cutoff (Default : False)
                                                            ! Set by specifying KE_CUTOFF in input file.
      real(kind=dp)                  :: ke_cutoff           ! Planewave cutoff to use for truncation of Fourier components (in Hartrees)
+
+     ! Read expval.data - slightly different file format 10/06/2025
+     logical                        :: check_expval        ! Do we want to check expectation values?
+     logical                        :: use_platt           ! Use primitive lattice vectors in latt file? (False if check_expval is true, true otherwise)
+
   end type params
 
   type(params),public,save :: user_params   ! public instance of params type
   !---------------------------------------------------------------------------!
   !                       P u b l i c   R o u t i n e s                       !
   !---------------------------------------------------------------------------!
-
   public :: latt_read
+  public :: latt_write_platt
+  public :: latt_calc_const_and_angles
 
   !---------------------------------------------------------------------------!
   !                     P r i v a t e   V a r i a b l e s                     !
@@ -89,7 +98,23 @@ contains
        stop
     end if
 
-    ! First read the size of the user's grid
+    ! First of all determine the type of run we are doing - i.e. CHECK_EXPVAL
+    user_params%use_platt=.true. ! Use the primitive lattice from the latt file unless told otherwise
+    if (io_file_present(unit,'check_expval')) then
+       user_params%check_expval = .true.
+       write(stdout,'(A14,18x,A,/)') ' Density type:', 'Expectation value'
+       ! Set the read flag for primitive lattice vectors to false,
+       ! we'll read it from the expval.data file using casino_read_expval
+       user_params%use_platt = .false.
+    else
+       user_params%check_expval = .false.
+       write(stdout,'(A14,18x,A,/)') ' Density type:', 'Extrapolated'
+    end if
+    ! DEBUG PLATT_READ_FLAGS
+    ! write(*,*) 'CHECK_EXPVAL', user_params%check_expval
+    ! write(*,*) 'USE_PLATT', user_params%use_platt
+
+    ! Read the size of the user's grid
     allocate(tmpc(1))
     if (io_file_present(unit,'castep_grid')) then
        tmpc = trim(io_file_code(unit,'castep_grid',whole=.true.))
@@ -104,28 +129,30 @@ contains
     ! Check if the grid contains an odd number of grid points
     call latt_check_grid(user_params%ngx,user_params%ngy,user_params%ngz)
 
-    ! Obtain the user's primitive lattice vectors
-    call io_read_block(unit,'prim_latt_cart',tmpc)
-    if (size(tmpc)/=3) stop 'ERROR: prim_latt_cart block incorrectly specified.'
-    do i=1,3
-       read(tmpc(i),*,iostat=iostat) user_params%platt(i,1), user_params%platt(i,2), user_params%platt(i,3)
-       if(iostat/=0) error stop 'latt_read: Failed to read prim_latt_cart block'
-    end do
-    deallocate(tmpc)
+    ! Obtain the user's primitive lattice vectors if desired
+    if (user_params%use_platt) then
+       call io_read_block(unit,'prim_latt_cart',tmpc)
+       if (size(tmpc)/=3) stop 'ERROR: prim_latt_cart block incorrectly specified.'
+       do i=1,3
+          read(tmpc(i),*,iostat=iostat) user_params%platt(i,1), user_params%platt(i,2), user_params%platt(i,3)
+          if(iostat/=0) error stop 'latt_read: Failed to read prim_latt_cart block'
+       end do
+       deallocate(tmpc)
 
-    ! Now convert the lattice vectors to Bohr (if required)
-    if (.not.io_file_present(unit,'unit_bohr')) then
-       user_params%platt = user_params%platt/bohr_radius
+       ! Now convert the lattice vectors to Bohr (if required)
+       if (.not.io_file_present(unit,'unit_bohr')) then
+          user_params%platt = user_params%platt/bohr_radius
+       end if
+
+       ! Write out the primitive lattice vectors
+       call latt_write_platt()
+
+       ! Calculate the lattice constants - NB output is handled within latt_calc_const_and_angles
+       call latt_calc_const_and_angles()
+    else
+       ! Getting them from expval file - will be done in casino_read_expval
+       write(stdout,'(A61)') ' Will obtain primitive lattice vectors from expval.data file.'
     end if
-
-    write(stdout,'(15x,"Real Lattice (",A1,")", 40x, "Real Lattice (",A4,")")') 'A', 'Bohr'
-    do i=1,3
-       write(stdout,100) user_params%platt(i,:)*bohr_radius, user_params%platt(i,:)
-    end do
-100 format(3f16.10,5x,3f16.10)
-
-    ! Calculate the lattice constants - NB output is handled within latt_calc_const_and_angles
-    call latt_calc_const_and_angles()
 
     ! Get density output file
     user_params%den_fmt_file = trim(io_strip_extension(trim(filename)))//'.den_fmt'
@@ -225,6 +252,35 @@ contains
        end if
     end if
   end subroutine latt_check_grid
+
+  subroutine latt_write_platt()
+    !============================================================!
+    ! Write out the primitive lattice vectors in a nice format   !
+    ! in both Bohr and Angstroms                                 !
+    !------------------------------------------------------------!
+    ! Arguments                                                  !
+    ! platt(in) : the primitive lattice vectors in Bohr          !
+    !------------------------------------------------------------!
+    ! Modules used                                               !
+    ! IO, constants                                              !
+    !------------------------------------------------------------!
+    ! Necessary conditions                                       !
+    ! The primitive lattice vectors contained in                 !
+    ! user_params%platt must contain the valid set of            !
+    ! lattice vectors (in Bohr!!) before this routine is called. !
+    !============================================================!
+    use io,        only : stdout
+    use constants, only : bohr_radius
+
+    implicit none
+
+    integer :: i
+    write(stdout,'(15x,"Real Lattice (",A1,")", 40x, "Real Lattice (",A4,")")') 'A', 'Bohr'
+    do i=1,3
+       write(stdout,100) user_params%platt(i,:)*bohr_radius, user_params%platt(i,:)
+    end do
+100 format(3f16.10,5x,3f16.10)
+  end subroutine latt_write_platt
 
   subroutine latt_calc_const_and_angles(silent)
     !============================================================!
